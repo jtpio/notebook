@@ -1,0 +1,11 @@
+name: notebook-dev
+channels:
+- conda-forge
+dependencies:
+- nodejs=14
+- yarn=1
+- python=3.10
+- mamba
+- black
+- flake8
+- pylint
