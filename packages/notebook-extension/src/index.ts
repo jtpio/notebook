@@ -252,6 +252,34 @@ const kernelStatus: JupyterFrontEndPlugin<void> = {
 };
 
 /**
+ * A plugin to add the NotebookTools to the side panel;
+ */
+const notebookToolsWidget: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-notebook/notebook-extension:notebook-tools',
+  autoStart: true,
+  requires: [INotebookShell],
+  optional: [INotebookTools],
+  activate: (
+    app: JupyterFrontEnd,
+    shell: INotebookShell,
+    notebookTools: INotebookTools | null
+  ) => {
+    const onChange = async () => {
+      const current = shell.currentWidget;
+      if (!(current instanceof NotebookPanel)) {
+        return;
+      }
+
+      // Add the notebook tools in right area.
+      if (notebookTools) {
+        shell.add(notebookTools, 'right');
+      }
+    };
+    shell.currentChanged.connect(onChange);
+  },
+};
+
+/**
  * A plugin to enable scrolling for outputs by default.
  * Mimic the logic from the classic notebook, as found here:
  * https://github.com/jupyter/notebook/blob/a9a31c096eeffe1bff4e9164c6a0442e0e13cdb3/notebook/static/notebook/js/outputarea.js#L96-L120
@@ -339,34 +367,6 @@ const scrollOutput: JupyterFrontEndPlugin<void> = {
 };
 
 /**
- * A plugin to add the NotebookTools to the side panel;
- */
-const notebookToolsWidget: JupyterFrontEndPlugin<void> = {
-  id: '@jupyter-notebook/notebook-extension:notebook-tools',
-  autoStart: true,
-  requires: [INotebookShell],
-  optional: [INotebookTools],
-  activate: (
-    app: JupyterFrontEnd,
-    shell: INotebookShell,
-    notebookTools: INotebookTools | null
-  ) => {
-    const onChange = async () => {
-      const current = shell.currentWidget;
-      if (!(current instanceof NotebookPanel)) {
-        return;
-      }
-
-      // Add the notebook tools in right area.
-      if (notebookTools) {
-        shell.add(notebookTools, 'right');
-      }
-    };
-    shell.currentChanged.connect(onChange);
-  },
-};
-
-/**
  * A plugin that adds a Trusted indicator to the menu area
  */
 const trusted: JupyterFrontEndPlugin<void> = {
@@ -402,8 +402,8 @@ const plugins: JupyterFrontEndPlugin<any>[] = [
   checkpoints,
   kernelLogo,
   kernelStatus,
-  scrollOutput,
   notebookToolsWidget,
+  scrollOutput,
   trusted,
 ];
 

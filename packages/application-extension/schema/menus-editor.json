@@ -1,0 +1,23 @@
+{
+    "title": "Jupyter Menu Entries - Editor",
+    "description": "Menu Entries on the Editor page",
+    "jupyter.lab.menus": {
+      "main": [
+        {
+          "id": "jp-mainmenu-view",
+          "items": [
+            {
+              "type": "submenu",
+              "disabled": false,
+              "submenu": {
+                "id": "jp-mainmenu-view-codemirror-language"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "properties": {},
+    "additionalProperties": false,
+    "type": "object"
+  }

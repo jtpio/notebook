@@ -29,6 +29,13 @@
             "submenu": {
               "id": "jp-mainmenu-view-appearance"
             }
+          },
+          {
+            "type": "submenu",
+            "disabled": true,
+            "submenu": {
+              "id": "jp-mainmenu-view-codemirror-language"
+            }
           }
         ]
       },

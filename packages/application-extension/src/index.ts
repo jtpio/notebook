@@ -199,9 +199,13 @@ const opener: JupyterFrontEndPlugin<void> = {
  */
 const menus: JupyterFrontEndPlugin<void> = {
   id: '@jupyter-notebook/application-extension:menus',
-  requires: [IMainMenu],
+  requires: [IMainMenu, ISettingRegistry],
   autoStart: true,
-  activate: (app: JupyterFrontEnd, menu: IMainMenu) => {
+  activate: (
+    app: JupyterFrontEnd,
+    menu: IMainMenu,
+    settingRegistry: ISettingRegistry
+  ) => {
     // always disable the Tabs menu
     menu.tabsMenu.dispose();
 
@@ -214,10 +218,13 @@ const menus: JupyterFrontEndPlugin<void> = {
         menu.kernelMenu.dispose();
         menu.runMenu.dispose();
         break;
-      case 'edit':
+      case 'edit': {
         menu.kernelMenu.dispose();
         menu.runMenu.dispose();
+        const editorMenus = `${menus.id}-editor`;
+        void settingRegistry.load(editorMenus);
         break;
+      }
       default:
         break;
     }
