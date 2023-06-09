@@ -367,6 +367,47 @@ const notebookToolsWidget: JupyterFrontEndPlugin<void> = {
 };
 
 /**
+ * A plugin to show the pager in the bottom area
+ */
+const pager: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-notebook/notebook-extension:pager',
+  autoStart: true,
+  requires: [INotebookTracker],
+  activate: (
+    app: JupyterFrontEnd,
+    tracker: INotebookTracker,
+  ): void => {
+
+    const setRedirect = (cell: Cell) => {
+      if (cell.model.type === 'code') {
+        const codeCell = cell as CodeCell;
+        codeCell.outputArea.outputTracker.widgetAdded.connect((sender, widget) => {
+          widget.dispose();
+        });
+        codeCell.outputArea.model.changed.connect((sender, args) => {
+          args.newValues.forEach((value, index) => {
+            console.log(value);
+            value.dispose();
+          });
+        });
+      }
+    };
+
+    tracker.widgetAdded.connect((sender, notebook) => {
+      notebook.model?.cells.changed.connect((sender, args) => {
+        notebook.content.widgets.forEach(setRedirect);
+      });
+      notebook.sessionContext.ready.then(() => {
+        notebook.sessionContext.session?.kernel?.anyMessage.connect((sender, args) => {
+          console.log(args.msg.content);
+        });
+      });
+    });
+
+  }
+};
+
+/**
  * A plugin that adds a Trusted indicator to the menu area
  */
 const trusted: JupyterFrontEndPlugin<void> = {
@@ -404,6 +445,7 @@ const plugins: JupyterFrontEndPlugin<any>[] = [
   kernelStatus,
   scrollOutput,
   notebookToolsWidget,
+  pager,
   trusted,
 ];
 

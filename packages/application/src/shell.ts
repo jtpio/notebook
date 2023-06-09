@@ -370,7 +370,7 @@ export namespace Shell {
   /**
    * The areas of the application shell where widgets can reside.
    */
-  export type Area = 'main' | 'top' | 'left' | 'right' | 'menu';
+  export type Area = 'main' | 'top' | 'left' | 'right' | 'menu' | 'bottom';
 }
 
 export namespace Private {
