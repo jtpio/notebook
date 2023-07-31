@@ -2,7 +2,7 @@
   "title": "Kernel logo",
   "description": "Kernel logo in the top area",
   "jupyter.lab.toolbars": {
-    "TopBar": [{ "name": "kernelLogo", "rank": 110 }]
+    "TopBar": [{ "name": "kernelLogo", "rank": 200 }]
   },
   "properties": {},
   "additionalProperties": false,
