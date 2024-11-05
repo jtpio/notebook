@@ -15,6 +15,7 @@ const BundleAnalyzerPlugin =
 
 const Build = require('@jupyterlab/builder').Build;
 const WPPlugin = require('@jupyterlab/builder').WPPlugin;
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 const baseConfig = require('@jupyterlab/builder/lib/webpack.config.base');
 
 const data = require('./package.json');
@@ -204,12 +205,33 @@ if (process.argv.includes('--analyze')) {
   extras.push(new BundleAnalyzerPlugin());
 }
 
+const htmlPlugins = [];
+['consoles', 'edit', 'error', 'notebooks', 'terminals', 'tree'].forEach(
+  (name) => {
+    htmlPlugins.push(
+      new HtmlWebpackPlugin({
+        chunksSortMode: 'none',
+        template: path.join(
+          path.resolve('./templates'),
+          `${name}_template.html`
+        ),
+        title: name,
+        filename: path.join(
+          path.resolve(__dirname, '..', 'notebook/templates'),
+          `${name}.html`
+        ),
+      })
+    );
+  }
+);
+
 module.exports = [
   merge(baseConfig, {
     mode: 'development',
     entry: ['./publicpath.js', './' + path.relative(__dirname, entryPoint)],
     output: {
       path: path.resolve(__dirname, '..', 'notebook/static/'),
+      publicPath: '{{page_config.fullStaticUrl}}/',
       library: {
         type: 'var',
         name: ['_JUPYTERLAB', 'CORE_OUTPUT'],
@@ -231,6 +253,7 @@ module.exports = [
       fallback: { util: false },
     },
     plugins: [
+      ...htmlPlugins,
       new WPPlugin.JSONLicenseWebpackPlugin({
         excludedPackageTest: (packageName) =>
           packageName === '@jupyter-notebook/app',
@@ -246,3 +269,6 @@ module.exports = [
     ],
   }),
 ].concat(extras);
+
+const logPath = path.join(buildDir, 'build_log.json');
+fs.writeFileSync(logPath, JSON.stringify(module.exports, null, '  '));
