@@ -15,6 +15,7 @@ env:
   version_tag: 'latest'
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
