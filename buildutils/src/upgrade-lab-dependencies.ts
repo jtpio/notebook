@@ -158,20 +158,20 @@ async function updatePreCommitConfig(version: IVersion): Promise<void> {
   updateVersionInFile(filePath, pattern, version);
 }
 
-async function updateWorkflowFiles(version: IVersion): Promise<void> {
-  const workflowDir = path.resolve('.github', 'workflows');
-  const files = fs.readdirSync(workflowDir);
-  const pattern = /(jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="|,|\s|$)/g;
+// async function updateWorkflowFiles(version: IVersion): Promise<void> {
+//   const workflowDir = path.resolve('.github', 'workflows');
+//   const files = fs.readdirSync(workflowDir);
+//   const pattern = /(jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="|,|\s|$)/g;
 
-  for (const file of files) {
-    const filePath = path.join(workflowDir, file);
-    const content = fs.readFileSync(filePath, 'utf-8');
+//   for (const file of files) {
+//     const filePath = path.join(workflowDir, file);
+//     const content = fs.readFileSync(filePath, 'utf-8');
 
-    if (content.includes('jupyterlab>=')) {
-      updateVersionInFile(filePath, pattern, version, true);
-    }
-  }
-}
+//     if (content.includes('jupyterlab>=')) {
+//       updateVersionInFile(filePath, pattern, version, true);
+//     }
+//   }
+// }
 
 async function upgradeLabDependencies(): Promise<void> {
   const args: string[] = process.argv.slice(2);
@@ -185,7 +185,7 @@ async function upgradeLabDependencies(): Promise<void> {
   await updatePackageJson(args[1]); // Keep original string version for package.json
   await updatePyprojectToml(version);
   await updatePreCommitConfig(version);
-  await updateWorkflowFiles(version);
+  // await updateWorkflowFiles(version);
 }
 
 upgradeLabDependencies();
