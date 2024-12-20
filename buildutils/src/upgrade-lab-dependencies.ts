@@ -21,6 +21,57 @@ const PACKAGE_JSON_PATHS: string[] = [
 
 const DEPENDENCY_GROUP = '@jupyterlab';
 
+interface IVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  preRelease?: string;
+}
+
+function parseVersion(version: string): IVersion {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:(a|b|rc)(\d+))?$/);
+  if (!match) {
+    throw new Error(`Invalid version format: ${version}`);
+  }
+
+  const [, major, minor, patch, type, preVersion] = match;
+  const baseVersion = {
+    major: parseInt(major, 10),
+    minor: parseInt(minor, 10),
+    patch: parseInt(patch, 10),
+  };
+
+  if (type && preVersion) {
+    return {
+      ...baseVersion,
+      preRelease: `${type}${preVersion}`,
+    };
+  }
+
+  return baseVersion;
+}
+
+function getVersionRange(version: IVersion): string {
+  const baseVersion = `${version.major}.${version.minor}.${version.patch}`;
+  if (version.preRelease) {
+    // For pre-releases, we want to be exact with the version
+    return `==${baseVersion}${version.preRelease}`;
+  }
+  return `>=${baseVersion},<${version.major}.${version.minor + 1}`;
+}
+
+function updateVersionInFile(
+  filePath: string,
+  pattern: RegExp,
+  version: IVersion,
+  isGlobal = false
+): void {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const versionRange = getVersionRange(version);
+  const updatedContent = content.replace(pattern, `$1${versionRange}`);
+  fs.writeFileSync(filePath, updatedContent);
+}
+
 async function updatePackageJson(newVersion: string): Promise<void> {
   const url = `https://raw.githubusercontent.com/jupyterlab/jupyterlab/v${newVersion}/jupyterlab/staging/package.json`;
   const response = await fetch(url);
@@ -89,6 +140,41 @@ function absoluteVersion(version: string): string {
   return version;
 }
 
+async function updatePyprojectToml(version: IVersion): Promise<void> {
+  const filePath = path.resolve('pyproject.toml');
+
+  // Update the build-system requires
+  const buildSystemPattern =
+    /(requires\s*=\s*\[".*?jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="])/;
+  updateVersionInFile(filePath, buildSystemPattern, version);
+
+  // Update the project dependencies
+  const dependenciesPattern =
+    /(jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="|,|\s|$)/;
+  updateVersionInFile(filePath, dependenciesPattern, version);
+}
+
+async function updatePreCommitConfig(version: IVersion): Promise<void> {
+  const filePath = path.resolve('.pre-commit-config.yaml');
+  const pattern = /(jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="|,|\s|$)/;
+  updateVersionInFile(filePath, pattern, version);
+}
+
+async function updateWorkflowFiles(version: IVersion): Promise<void> {
+  const workflowDir = path.resolve('.github', 'workflows');
+  const files = fs.readdirSync(workflowDir);
+  const pattern = /(jupyterlab)(?:>=|==)[\d.]+(?:,<[\d.]+)?(?="|,|\s|$)/g;
+
+  for (const file of files) {
+    const filePath = path.join(workflowDir, file);
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    if (content.includes('jupyterlab>=')) {
+      updateVersionInFile(filePath, pattern, version, true);
+    }
+  }
+}
+
 async function upgradeLabDependencies(): Promise<void> {
   const args: string[] = process.argv.slice(2);
 
@@ -97,8 +183,11 @@ async function upgradeLabDependencies(): Promise<void> {
     process.exit(1);
   }
 
-  const newVersion: string = args[1];
-  await updatePackageJson(newVersion);
+  const version = parseVersion(args[1]);
+  await updatePackageJson(args[1]); // Keep original string version for package.json
+  await updatePyprojectToml(version);
+  await updatePreCommitConfig(version);
+  await updateWorkflowFiles(version);
 }
 
 upgradeLabDependencies();
