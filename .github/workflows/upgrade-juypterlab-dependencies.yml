@@ -10,6 +10,11 @@ on:
         default: latest
         required: true
         type: string
+      branch:
+        description: 'The branch to target'
+        default: main
+        required: false
+        type: string
 
 env:
   version_tag: 'latest'
@@ -90,6 +95,7 @@ jobs:
 
               git push --set-upstream origin "${BRANCH_NAME}"
               gh pr create \
+                --base ${{ inputs.branch || 'main' }} \
                 --title "Update to JupyterLab v${LATEST}" \
                 --body "New JupyterLab release [v${LATEST}](https://github.com/jupyterlab/jupyterlab/releases/tag/v${LATEST}) is available. Please review the lock file carefully."
             fi
