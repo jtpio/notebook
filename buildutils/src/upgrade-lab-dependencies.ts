@@ -52,11 +52,9 @@ function parseVersion(version: string): IVersion {
 }
 
 function getVersionRange(version: IVersion): string {
-  const baseVersion = `${version.major}.${version.minor}.${version.patch}`;
-  if (version.preRelease) {
-    // For pre-releases, we want to be exact with the version
-    return `==${baseVersion}${version.preRelease}`;
-  }
+  const baseVersion = `${version.major}.${version.minor}.${version.patch}${
+    version.preRelease ?? ''
+  }`;
   return `>=${baseVersion},<${version.major}.${version.minor + 1}`;
 }
 
