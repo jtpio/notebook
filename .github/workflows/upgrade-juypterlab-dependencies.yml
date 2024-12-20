@@ -52,7 +52,11 @@ jobs:
           set -eux
           for version in ${{ inputs.version || env.version_tag }}
           do
-            export LATEST=$(jlpm run get:lab:version --set-version $version)
+            if [[ "${version}" == "latest" ]]; then
+              export LATEST=$(jlpm run get:lab:version --set-version ${version})
+            else
+              export LATEST=${version}
+            fi
           done
 
           echo "latest=${LATEST}" >> $GITHUB_ENV

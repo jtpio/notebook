@@ -31,7 +31,7 @@
     "eslint": "eslint . --ext .ts,.tsx --fix",
     "eslint:check": "eslint . --ext .ts,.tsx",
     "eslint:files": "eslint --fix",
-    "get:lab:version": "node ./buildutils/lib/get-lab-version.js",
+    "get:lab:version": "node ./buildutils/lib/get-latest-lab-version.js",
     "integrity": "node buildutils/lib/ensure-repo.js",
     "prettier": "prettier --write \"**/*{.ts,.tsx,.js,.jsx,.css,.json,.md}\"",
     "prettier:check": "prettier --list-different \"**/*{.ts,.tsx,.js,.jsx,.css,.json,.md}\"",
