@@ -16,8 +16,9 @@ on:
         required: false
         type: string
       target_repo:
-        description: 'Target repository (e.g. jupyter/notebook)'
+        description: 'Target repository'
         required: false
+        default: jupyter/notebook
         type: string
 
 env:
