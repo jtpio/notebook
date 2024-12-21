@@ -78,7 +78,16 @@ async function updatePackageJson(newVersion: string): Promise<void> {
     throw new Error(errorMessage);
   }
 
+  // fetch the new galata version
+  const galataUrl = `https://raw.githubusercontent.com/jupyterlab/jupyterlab/v${newVersion}/galata/package.json`;
+  const galataResponse = await fetch(galataUrl);
+  if (!galataResponse.ok) {
+    const errorMessage = `Failed to fetch galata/package.json from ${galataUrl}. HTTP status code: ${galataResponse.status}`;
+    throw new Error(errorMessage);
+  }
+
   const newPackageJson = await response.json();
+  const galataPackageJson = await galataResponse.json();
 
   for (const packageJsonPath of PACKAGE_JSON_PATHS) {
     const filePath: string = path.resolve(packageJsonPath);
@@ -87,6 +96,7 @@ async function updatePackageJson(newVersion: string): Promise<void> {
     const newDependencies = {
       ...newPackageJson.devDependencies,
       ...newPackageJson.resolutions,
+      '@jupyterlab/galata': galataPackageJson.version,
     };
 
     updateDependencyVersion(existingPackageJson, newDependencies);
