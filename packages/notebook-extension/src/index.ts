@@ -27,6 +27,10 @@ import {
   INotebookTools,
 } from '@jupyterlab/notebook';
 
+import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
+
+import { KernelMessage, Kernel } from '@jupyterlab/services';
+
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
 import { ITranslator, nullTranslator } from '@jupyterlab/translation';
@@ -38,6 +42,8 @@ import { Poll } from '@lumino/polling';
 import { Widget } from '@lumino/widgets';
 
 import { TrustedComponent } from './trusted';
+
+import { PagerWidget } from './pager';
 
 /**
  * The class for kernel status errors.
@@ -678,6 +684,127 @@ const editNotebookMetadata: JupyterFrontEndPlugin<void> = {
 };
 
 /**
+ * A plugin providing a pager widget to display help and documentation
+ * in the down panel, similar to classic notebook behavior.
+ */
+const pager: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-notebook/notebook-extension:pager',
+  description:
+    'A plugin providing a pager widget to display help and documentation.',
+  autoStart: true,
+  requires: [INotebookShell, IRenderMimeRegistry, INotebookTracker],
+  optional: [ITranslator],
+  activate: (
+    app: JupyterFrontEnd,
+    shell: INotebookShell,
+    rendermime: IRenderMimeRegistry,
+    notebookTracker: INotebookTracker,
+    translator: ITranslator | null
+  ) => {
+    let pagerWidget: PagerWidget | null = null;
+
+    // Function to create pager widget if needed
+    const ensurePagerWidget = (): PagerWidget => {
+      // Check if pager widget exists and is still in the shell
+      if (!pagerWidget || pagerWidget.isDisposed || !pagerWidget.parent) {
+        pagerWidget = new PagerWidget({
+          rendermime,
+          translator: translator || undefined,
+        });
+        shell.add(pagerWidget, 'down');
+
+        // Listen for when the widget is disposed/closed to reset our reference
+        pagerWidget.disposed.connect(() => {
+          pagerWidget = null;
+        });
+      }
+      return pagerWidget;
+    };
+
+    // Listen for kernel messages that contain pager payloads
+    const kernelMessageHandlers: {
+      [sessionId: string]: {
+        kernel: Kernel.IKernelConnection;
+        handler: (
+          sender: Kernel.IKernelConnection,
+          args: Kernel.IAnyMessageArgs
+        ) => void;
+      };
+    } = {};
+
+    const setupKernelMessageListener = (sessionContext: ISessionContext) => {
+      const sessionId = sessionContext.session?.id;
+      if (!sessionId) {
+        return;
+      }
+
+      // Remove existing handler if any
+      if (kernelMessageHandlers[sessionId]) {
+        const { kernel, handler } = kernelMessageHandlers[sessionId];
+        kernel.anyMessage.disconnect(handler);
+        delete kernelMessageHandlers[sessionId];
+      }
+
+      // Listen for kernel messages that may contain pager payloads
+      const handler = (
+        sender: Kernel.IKernelConnection,
+        args: Kernel.IAnyMessageArgs
+      ) => {
+        const { msg } = args;
+        // Check for execute_reply messages with payload
+        if (msg.header.msg_type === 'execute_reply') {
+          const content = msg.content as KernelMessage.IExecuteReply;
+          if (content.status === 'ok' && content.payload) {
+            // Look for page payload
+            const pagePayload = content.payload.find(
+              (p: any) => p.source === 'page'
+            );
+            if (pagePayload && pagePayload.data) {
+              const widget = ensurePagerWidget();
+              widget.showInspectionData(
+                pagePayload.data as Record<string, any>
+              );
+              shell.activateById(widget.id);
+            }
+          }
+        }
+      };
+
+      // Connect to the kernel's anyMessage signal to catch shell messages like execute_reply
+      if (sessionContext.session?.kernel) {
+        sessionContext.session.kernel.anyMessage.connect(handler);
+        kernelMessageHandlers[sessionId] = {
+          kernel: sessionContext.session.kernel,
+          handler: handler,
+        };
+      }
+    };
+
+    notebookTracker.widgetAdded.connect((sender, panel) => {
+      // Set up kernel message listener for this notebook's session
+      if (panel.sessionContext) {
+        setupKernelMessageListener(panel.sessionContext);
+      }
+
+      // Also listen for session context changes
+      panel.sessionContext.sessionChanged.connect(() => {
+        if (panel.sessionContext) {
+          setupKernelMessageListener(panel.sessionContext);
+        }
+      });
+    });
+
+    // Handle current notebook if already open
+    if (notebookTracker.currentWidget) {
+      const panel = notebookTracker.currentWidget;
+      if (panel.sessionContext) {
+        setupKernelMessageListener(panel.sessionContext);
+      }
+    }
+  },
+};
+
+/**
  * Export the plugins as default.
  */
 const plugins: JupyterFrontEndPlugin<any>[] = [
@@ -689,6 +816,7 @@ const plugins: JupyterFrontEndPlugin<any>[] = [
   kernelLogo,
   kernelStatus,
   notebookToolsWidget,
+  pager,
   scrollOutput,
   tabIcon,
   trusted,
