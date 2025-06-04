@@ -132,4 +132,3 @@ index 730731f0712838cb914a723ec2368e9506c0e4c5..07a5132e6fd70d4f3bdee0b643e18765
 +    void app.restored.then(() => setSource(app.shell.currentWidget));
    }
  };
-
