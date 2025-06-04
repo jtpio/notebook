@@ -40,7 +40,11 @@ import { Poll } from '@lumino/polling';
 import { Widget } from '@lumino/widgets';
 
 import { TrustedComponent } from './trusted';
-import { IInspector } from '@jupyterlab/inspector';
+import {
+  IInspector,
+  InspectionHandler,
+  KernelConnector,
+} from '@jupyterlab/inspector';
 
 /**
  * The class for kernel status errors.
@@ -687,7 +691,7 @@ const editNotebookMetadata: JupyterFrontEndPlugin<void> = {
 const pager: JupyterFrontEndPlugin<void> = {
   id: '@jupyter-notebook/notebook-extension:pager',
   description:
-    'A plugin to toggle the JupyterLab inspector when a pager payload is received.',
+    'A plugin to toggle the inspector when a pager payload is received.',
   autoStart: true,
   requires: [INotebookTracker, IInspector],
   activate: (
@@ -743,13 +747,10 @@ const pager: JupyterFrontEndPlugin<void> = {
             );
 
             if (pagePayload && pagePayload.data) {
-              app.commands.execute('inspector:open');
               const text = (pagePayload.data as any)['text/plain'];
-              if (inspector.source) {
-                inspector.source.standby = false;
-                inspector.source.onEditorChange(text);
-                inspector.source.standby = true;
-              }
+              const refresh = true;
+              app.commands.execute('inspector:open', { refresh, text });
+              inspector.source?.onEditorChange(text);
 
               // To prevent this pager data from also appearing in the cell's output area,
               // remove the 'page' payload from the message after handling it.
@@ -766,10 +767,6 @@ const pager: JupyterFrontEndPlugin<void> = {
             }
           }
         }
-        // Note: If your application also handles 'page' messages directly on the IOPub channel
-        // (some kernels might send them there, though 'execute_reply' payload is more common for requests like `?foo`),
-        // you might need a similar check for `msg.channel === 'iopub'` and `msg.header.msg_type === 'page'`.
-        // However, the JupyterLab example specifically processes it from 'execute_reply.payload'.
       };
 
       // Connect to the kernel's anyMessage signal to catch shell messages like execute_reply
@@ -781,6 +778,8 @@ const pager: JupyterFrontEndPlugin<void> = {
         };
       }
     };
+
+    let handler: InspectionHandler;
 
     notebookTracker.widgetAdded.connect((sender, panel) => {
       // Set up kernel message listener for this notebook's session
@@ -794,6 +793,20 @@ const pager: JupyterFrontEndPlugin<void> = {
           setupKernelMessageListener(panel.sessionContext);
         }
       });
+
+      const sessionContext = panel.sessionContext;
+      const rendermime = panel.content.rendermime;
+      const connector = new KernelConnector({ sessionContext });
+      handler = new InspectionHandler({ connector, rendermime });
+
+      // Set the initial editor.
+      const cell = panel.content.activeCell;
+      handler.editor = cell && cell.editor;
+
+      // Listen for parent disposal.
+      panel.disposed.connect(() => {
+        handler.dispose();
+      });
     });
 
     // Handle current notebook if already open
@@ -803,6 +816,12 @@ const pager: JupyterFrontEndPlugin<void> = {
         setupKernelMessageListener(panel.sessionContext);
       }
     }
+
+    // Keep track of notebook instances and set inspector source.
+    const setSource = (widget: Widget | null): void => {
+      inspector.source = handler;
+    };
+    void app.restored.then(() => setSource(app.shell.currentWidget));
   },
 };
 

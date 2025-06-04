@@ -288,7 +288,10 @@
         ],
         "@jupyterlab/htmlviewer-extension": true,
         "@jupyterlab/imageviewer-extension": true,
-        "@jupyterlab/inspector-extension": true,
+        "@jupyterlab/inspector-extension": [
+          "@jupyterlab/inspector-extension:inspector",
+          "@jupyterlab/inspector-extension:consoles"
+        ],
         "@jupyterlab/lsp-extension": true,
         "@jupyterlab/mainmenu-extension": [
           "@jupyterlab/mainmenu-extension:plugin"
