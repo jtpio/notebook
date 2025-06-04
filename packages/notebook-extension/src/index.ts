@@ -27,8 +27,6 @@ import {
   INotebookTools,
 } from '@jupyterlab/notebook';
 
-import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
-
 import { KernelMessage, Kernel } from '@jupyterlab/services';
 
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -42,8 +40,7 @@ import { Poll } from '@lumino/polling';
 import { Widget } from '@lumino/widgets';
 
 import { TrustedComponent } from './trusted';
-
-import { PagerWidget } from './pager';
+import { IInspector } from '@jupyterlab/inspector';
 
 /**
  * The class for kernel status errors.
@@ -690,38 +687,14 @@ const editNotebookMetadata: JupyterFrontEndPlugin<void> = {
 const pager: JupyterFrontEndPlugin<void> = {
   id: '@jupyter-notebook/notebook-extension:pager',
   description:
-    'A plugin providing a pager widget to display help and documentation.',
+    'A plugin to toggle the JupyterLab inspector when a pager payload is received.',
   autoStart: true,
-  requires: [INotebookShell, IRenderMimeRegistry, INotebookTracker],
-  optional: [ITranslator],
+  requires: [INotebookTracker, IInspector],
   activate: (
     app: JupyterFrontEnd,
-    shell: INotebookShell,
-    rendermime: IRenderMimeRegistry,
     notebookTracker: INotebookTracker,
-    translator: ITranslator | null
+    inspector: IInspector
   ) => {
-    let pagerWidget: PagerWidget | null = null;
-
-    // Function to create pager widget if needed
-    const ensurePagerWidget = (): PagerWidget => {
-      // Check if pager widget exists and is still in the shell
-      if (!pagerWidget || pagerWidget.isDisposed || !pagerWidget.parent) {
-        pagerWidget = new PagerWidget({
-          rendermime,
-          translator: translator || undefined,
-        });
-        shell.add(pagerWidget, 'down');
-
-        // Listen for when the widget is disposed/closed to reset our reference
-        pagerWidget.disposed.connect(() => {
-          pagerWidget = null;
-        });
-      }
-      return pagerWidget;
-    };
-
-    // Listen for kernel messages that contain pager payloads
     const kernelMessageHandlers: {
       [sessionId: string]: {
         kernel: Kernel.IKernelConnection;
@@ -750,24 +723,53 @@ const pager: JupyterFrontEndPlugin<void> = {
         sender: Kernel.IKernelConnection,
         args: Kernel.IAnyMessageArgs
       ) => {
-        const { msg } = args;
-        // Check for execute_reply messages with payload
-        if (msg.header.msg_type === 'execute_reply') {
+        const { msg, direction } = args;
+
+        // Only process IOPub messages or shell replies for the pager
+        // We are interested in 'execute_reply' from the shell channel for pager data
+        if (
+          direction === 'recv' &&
+          msg.channel === 'shell' &&
+          msg.header.msg_type === 'execute_reply'
+        ) {
           const content = msg.content as KernelMessage.IExecuteReply;
-          if (content.status === 'ok' && content.payload) {
-            // Look for page payload
+          if (
+            content.status === 'ok' &&
+            content.payload &&
+            content.payload.length > 0
+          ) {
             const pagePayload = content.payload.find(
-              (p: any) => p.source === 'page'
+              (item: any) => item.source === 'page'
             );
+
             if (pagePayload && pagePayload.data) {
-              const widget = ensurePagerWidget();
-              widget.showInspectionData(
-                pagePayload.data as Record<string, any>
-              );
-              shell.activateById(widget.id);
+              app.commands.execute('inspector:open');
+              const text = (pagePayload.data as any)['text/plain'];
+              if (inspector.source) {
+                inspector.source.standby = false;
+                inspector.source.onEditorChange(text);
+                inspector.source.standby = true;
+              }
+
+              // To prevent this pager data from also appearing in the cell's output area,
+              // remove the 'page' payload from the message after handling it.
+              // This modifies the msg object in-flight.
+              if (content.payload) {
+                content.payload = content.payload.filter(
+                  (item: any) => item.source !== 'page'
+                );
+                if (content.payload.length === 0) {
+                  // If no other payloads remain, delete the payload array from the content.
+                  delete content.payload;
+                }
+              }
             }
           }
         }
+        // Note: If your application also handles 'page' messages directly on the IOPub channel
+        // (some kernels might send them there, though 'execute_reply' payload is more common for requests like `?foo`),
+        // you might need a similar check for `msg.channel === 'iopub'` and `msg.header.msg_type === 'page'`.
+        // However, the JupyterLab example specifically processes it from 'execute_reply.payload'.
       };
 
       // Connect to the kernel's anyMessage signal to catch shell messages like execute_reply
