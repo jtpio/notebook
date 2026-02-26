@@ -2,7 +2,6 @@
 // Distributed under the terms of the Modified BSD License.
 
 import { ICommandPalette } from '@jupyterlab/apputils';
-import { closeIcon } from '@jupyterlab/ui-components';
 import { ArrayExt, find } from '@lumino/algorithm';
 import { IDisposable } from '@lumino/disposable';
 import { IMessageHandler, Message, MessageLoop } from '@lumino/messaging';
@@ -80,11 +79,11 @@ export class SidePanelHandler extends PanelHandler {
     this._widgetPanel.widgetRemoved.connect(this._onWidgetRemoved, this);
 
     this._closeButton = document.createElement('button');
-    closeIcon.element({
-      container: this._closeButton,
-      height: '16px',
-      width: 'auto',
-    });
+    this._closeButton.type = 'button';
+    const closeLabel = document.createElement('span');
+    closeLabel.className = 'jp-SidePanel-collapseLabel';
+    closeLabel.textContent = '×';
+    this._closeButton.appendChild(closeLabel);
     this._closeButton.onclick = () => {
       this.collapse();
       this.hide();
@@ -92,9 +91,22 @@ export class SidePanelHandler extends PanelHandler {
     this._closeButton.className = 'jp-Button jp-SidePanel-collapse';
     this._closeButton.title = 'Collapse side panel';
 
-    const icon = new Widget({ node: this._closeButton });
-    this._panel.addWidget(icon);
+    const closeWidget = new Widget();
+    closeWidget.addClass('jp-SidePanel-closeWidget');
+    closeWidget.node.appendChild(this._closeButton);
+    this._panel.addWidget(closeWidget);
     this._panel.addWidget(this._widgetPanel);
+
+    const resizeWidget = new Widget();
+    resizeWidget.addClass('jp-SidePanel-resizeWidget');
+    this._resizeHandle = document.createElement('div');
+    this._resizeHandle.className = 'jp-SidePanel-resizeHandle';
+    this._resizeHandle.addEventListener(
+      'pointerdown',
+      this._onResizePointerDown
+    );
+    resizeWidget.node.appendChild(this._resizeHandle);
+    this._panel.addWidget(resizeWidget);
   }
 
   /**
@@ -148,6 +160,13 @@ export class SidePanelHandler extends PanelHandler {
    */
   get widgetRemoved(): ISignal<SidePanelHandler, Widget> {
     return this._widgetRemoved;
+  }
+
+  /**
+   * Signal fired when the side panel visibility or width changes.
+   */
+  get layoutChanged(): ISignal<SidePanelHandler, void> {
+    return this._layoutChanged;
   }
 
   /**
@@ -230,16 +249,24 @@ export class SidePanelHandler extends PanelHandler {
    * Hide the side panel
    */
   hide(): void {
+    const wasHidden = this._isHiddenByUser;
     this._isHiddenByUser = true;
     this._refreshVisibility();
+    if (!wasHidden) {
+      this._layoutChanged.emit(undefined);
+    }
   }
 
   /**
    * Show the side panel
    */
   show(): void {
+    const wasHidden = this._isHiddenByUser;
     this._isHiddenByUser = false;
     this._refreshVisibility();
+    if (wasHidden) {
+      this._layoutChanged.emit(undefined);
+    }
   }
 
   /**
@@ -271,6 +298,74 @@ export class SidePanelHandler extends PanelHandler {
     this._panel.setHidden(this._isHiddenByUser);
   }
 
+  /**
+   * Start panel resizing.
+   */
+  private _onResizePointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    this._resizeStartX = event.clientX;
+    this._panel.node.style.minWidth = '';
+    this._resizeStartWidth = this._panel.node.getBoundingClientRect().width;
+    this._isResizing = true;
+
+    document.body.classList.add('jp-mod-resizing-sidepanel');
+    window.addEventListener('pointermove', this._onResizePointerMove);
+    window.addEventListener('pointerup', this._onResizePointerUp);
+    window.addEventListener('pointercancel', this._onResizePointerUp);
+  };
+
+  /**
+   * Resize panel while dragging.
+   */
+  private _onResizePointerMove = (event: PointerEvent): void => {
+    if (!this._isResizing) {
+      return;
+    }
+    event.preventDefault();
+
+    const delta = event.clientX - this._resizeStartX;
+    const signedDelta = this._area === 'left' ? delta : -delta;
+    let nextWidth = this._resizeStartWidth + signedDelta;
+    const minWidth = Math.max(
+      180,
+      parseFloat(getComputedStyle(this._panel.node).minWidth) || 0
+    );
+    const maxWidth = Math.max(minWidth, Math.round(window.innerWidth * 0.45));
+    nextWidth = Math.min(maxWidth, Math.max(minWidth, nextWidth));
+
+    const width = `${Math.round(nextWidth)}px`;
+    this._panel.node.style.width = width;
+    MessageLoop.sendMessage(
+      this._widgetPanel,
+      Widget.ResizeMessage.UnknownSize
+    );
+    this._layoutChanged.emit(undefined);
+  };
+
+  /**
+   * End panel resizing.
+   */
+  private _onResizePointerUp = (): void => {
+    if (!this._isResizing) {
+      return;
+    }
+    this._isResizing = false;
+    document.body.classList.remove('jp-mod-resizing-sidepanel');
+    window.removeEventListener('pointermove', this._onResizePointerMove);
+    window.removeEventListener('pointerup', this._onResizePointerUp);
+    window.removeEventListener('pointercancel', this._onResizePointerUp);
+    MessageLoop.sendMessage(
+      this._widgetPanel,
+      Widget.ResizeMessage.UnknownSize
+    );
+    this._layoutChanged.emit(undefined);
+  };
+
   /*
    * Handle the `widgetRemoved` signal from the panel.
    */
@@ -291,8 +386,13 @@ export class SidePanelHandler extends PanelHandler {
   private _currentWidget: Widget | null;
   private _lastCurrentWidget: Widget | null;
   private _closeButton: HTMLButtonElement;
+  private _resizeHandle: HTMLDivElement;
+  private _isResizing = false;
+  private _resizeStartX = 0;
+  private _resizeStartWidth = 0;
   private _widgetAdded: Signal<SidePanelHandler, Widget> = new Signal(this);
   private _widgetRemoved: Signal<SidePanelHandler, Widget> = new Signal(this);
+  private _layoutChanged: Signal<SidePanelHandler, void> = new Signal(this);
 }
 
 /**

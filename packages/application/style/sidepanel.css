@@ -11,6 +11,10 @@
 
 :root {
   --jp-private-sidebar-tab-width: 32px;
+  --jp-private-sidebar-min-width: 180px;
+  --jp-private-sidebar-width: var(--jp-sidebar-min-width);
+  --jp-private-sidebar-close-size: 24px;
+  --jp-private-sidebar-resize-handle-size: 10px;
 }
 
 /*-----------------------------------------------------------------------------
@@ -23,26 +27,170 @@
 #jp-left-stack {
   display: flex;
   flex-direction: column;
-  min-width: var(--jp-sidebar-min-width);
+  min-width: var(--jp-private-sidebar-min-width);
+  width: var(--jp-private-sidebar-width);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 9;
+  overflow: visible;
+  background: var(--jp-layout-color1);
+  box-shadow: var(--jp-elevation-z2);
+}
+
+#jp-left-stack {
+  left: max(
+    0px,
+    calc(
+      (100% - var(--jp-notebook-max-width)) / 2 - var(--jp-private-sidebar-width)
+    )
+  );
+  border-right: var(--jp-border-width) solid var(--jp-border-color2);
+}
+
+#jp-right-stack {
+  right: max(
+    0px,
+    calc(
+      (100% - var(--jp-notebook-max-width)) / 2 - var(--jp-private-sidebar-width)
+    )
+  );
+  border-left: var(--jp-border-width) solid var(--jp-border-color2);
+}
+
+#jp-left-stack .jp-SidePanel-closeWidget,
+#jp-right-stack .jp-SidePanel-closeWidget {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  min-height: 0;
+  background: transparent;
+  pointer-events: none;
+  z-index: 13;
+}
+
+#jp-left-stack .jp-SidePanel-resizeWidget,
+#jp-right-stack .jp-SidePanel-resizeWidget {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+  pointer-events: none;
+  z-index: 12;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle,
+#jp-right-stack .jp-SidePanel-resizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--jp-private-sidebar-resize-handle-size);
+  touch-action: none;
+  pointer-events: auto;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle {
+  right: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
+  cursor: ew-resize;
+}
+
+#jp-right-stack .jp-SidePanel-resizeHandle {
+  left: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
+  cursor: ew-resize;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle::after,
+#jp-right-stack .jp-SidePanel-resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--jp-border-width);
+  background: var(--jp-border-color2);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle::after {
+  left: calc(var(--jp-private-sidebar-resize-handle-size) / 2);
+}
+
+#jp-right-stack .jp-SidePanel-resizeHandle::after {
+  right: calc(var(--jp-private-sidebar-resize-handle-size) / 2);
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle:hover::after,
+#jp-right-stack .jp-SidePanel-resizeHandle:hover::after,
+body.jp-mod-resizing-sidepanel #jp-left-stack .jp-SidePanel-resizeHandle::after,
+body.jp-mod-resizing-sidepanel
+  #jp-right-stack
+  .jp-SidePanel-resizeHandle::after {
+  opacity: 1;
 }
 
 #jp-left-stack .jp-SidePanel-collapse,
 #jp-right-stack .jp-SidePanel-collapse {
   display: flex;
-  flex: 0 0 auto;
-  min-height: 0;
+  position: absolute;
+  top: 4px;
+  z-index: 1;
+  width: var(--jp-private-sidebar-close-size);
+  min-width: var(--jp-private-sidebar-close-size);
+  height: var(--jp-private-sidebar-close-size);
+  min-height: var(--jp-private-sidebar-close-size);
   padding: 0;
+  border-radius: var(--jp-border-radius);
+  border: var(--jp-border-width) solid var(--jp-border-color2);
+  background: var(--jp-layout-color2);
+  color: var(--jp-ui-font-color1);
+  box-shadow: none;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 120ms ease;
+  pointer-events: auto;
 }
 
 #jp-left-stack .jp-SidePanel-collapse {
-  justify-content: right;
+  right: 4px;
 }
 
 #jp-right-stack .jp-SidePanel-collapse {
-  justify-content: left;
+  left: 4px;
+}
+
+#jp-left-stack .jp-SidePanel-collapseLabel,
+#jp-right-stack .jp-SidePanel-collapseLabel {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-0.5px);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:hover,
+#jp-right-stack .jp-SidePanel-collapse:hover {
+  background: var(--jp-layout-color3);
+  border-color: var(--jp-border-color1);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:focus-visible,
+#jp-right-stack .jp-SidePanel-collapse:focus-visible {
+  outline: 2px solid var(--accent-fill-focus, var(--jp-brand-color1));
+  outline-offset: 2px;
+}
+
+#jp-left-stack .jp-SidePanel-collapse:active,
+#jp-right-stack .jp-SidePanel-collapse:active {
+  background: var(--jp-layout-color1);
 }
 
 #jp-left-stack .lm-StackedPanel,
 #jp-right-stack .lm-StackedPanel {
   flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }

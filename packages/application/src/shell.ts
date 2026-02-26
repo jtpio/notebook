@@ -7,6 +7,7 @@ import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 
 import { find } from '@lumino/algorithm';
 import { JSONExt, PromiseDelegate, Token } from '@lumino/coreutils';
+import { MessageLoop } from '@lumino/messaging';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import {
@@ -119,6 +120,17 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     // Hide the side panels by default.
     leftHandler.hide();
     rightHandler.hide();
+    const onSidePanelLayoutChanged = () => {
+      this._updateSidePanelWidths();
+    };
+    leftHandler.layoutChanged.connect(onSidePanelLayoutChanged);
+    rightHandler.layoutChanged.connect(onSidePanelLayoutChanged);
+
+    const mainCompartment = new Panel();
+    mainCompartment.id = 'jp-main-compartment';
+    mainCompartment.addWidget(this._main);
+    mainCompartment.addWidget(leftHandler.panel);
+    mainCompartment.addWidget(rightHandler.panel);
 
     const middleLayout = new BoxLayout({
       spacing: 0,
@@ -126,13 +138,13 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     });
     BoxLayout.setStretch(this._topWrapper, 0);
     BoxLayout.setStretch(this._menuWrapper, 0);
-    BoxLayout.setStretch(this._main, 1);
+    BoxLayout.setStretch(mainCompartment, 1);
 
     const middlePanel = new Panel({ layout: middleLayout });
     middlePanel.addWidget(this._topWrapper);
     middlePanel.addWidget(this._menuWrapper);
     middlePanel.addWidget(this._spacer_top);
-    middlePanel.addWidget(this._main);
+    middlePanel.addWidget(mainCompartment);
     middlePanel.addWidget(this._spacer_bottom);
     middlePanel.layout = middleLayout;
 
@@ -148,26 +160,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     this._downPanel = downPanel;
     this._downPanel.id = 'jp-down-stack';
 
-    // TODO: Consider storing this as an attribute this._hsplitPanel if saving/restoring layout needed
-    const hsplitPanel = new SplitPanel();
-    hsplitPanel.id = 'main-split-panel';
-    hsplitPanel.spacing = 1;
-    BoxLayout.setStretch(hsplitPanel, 1);
-
-    SplitPanel.setStretch(leftHandler.panel, 0);
-    SplitPanel.setStretch(rightHandler.panel, 0);
-    SplitPanel.setStretch(middlePanel, 1);
-
-    hsplitPanel.addWidget(leftHandler.panel);
-    hsplitPanel.addWidget(middlePanel);
-    hsplitPanel.addWidget(rightHandler.panel);
-
-    // Use relative sizing to set the width of the side panels.
-    // This will still respect the min-size of children widget in the stacked
-    // panel.
-    hsplitPanel.setRelativeSizes([1, 2.5, 1]);
-
-    vsplitPanel.addWidget(hsplitPanel);
+    vsplitPanel.addWidget(middlePanel);
     vsplitPanel.addWidget(downPanel);
 
     rootLayout.spacing = 0;
@@ -185,12 +178,19 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
 
     this.layout = rootLayout;
 
+    this._sidePanelResizeObserver = new ResizeObserver(() => {
+      this._scheduleSidePanelWidthUpdate();
+    });
+    this._sidePanelResizeObserver.observe(leftHandler.panel.node);
+    this._sidePanelResizeObserver.observe(rightHandler.panel.node);
+
     // Added Skip to Main Link
     const skipLinkWidgetHandler = (this._skipLinkWidgetHandler =
       new Private.SkipLinkWidgetHandler(this));
 
     this.add(skipLinkWidgetHandler.skipLinkWidget, 'top', { rank: 0 });
     this._skipLinkWidgetHandler.show();
+    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -259,6 +259,21 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    */
   get restored(): Promise<void> {
     return this._mainWidgetLoaded.promise;
+  }
+
+  /**
+   * Dispose of the shell.
+   */
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
+    }
+    this._sidePanelResizeObserver.disconnect();
+    if (this._sidePanelWidthUpdateFrame !== null) {
+      cancelAnimationFrame(this._sidePanelWidthUpdateFrame);
+      this._sidePanelWidthUpdateFrame = null;
+    }
+    super.dispose();
   }
 
   /**
@@ -495,6 +510,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   expandLeft(id?: string): void {
     this._leftHandler.panel.show();
     this._leftHandler.expand(id); // Show the current widget, if any
+    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -503,6 +519,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   collapseLeft(): void {
     this._leftHandler.collapse();
     this._leftHandler.panel.hide();
+    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -511,6 +528,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   expandRight(id?: string): void {
     this._rightHandler.panel.show();
     this._rightHandler.expand(id); // Show the current widget, if any
+    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -519,6 +537,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   collapseRight(): void {
     this._rightHandler.collapse();
     this._rightHandler.panel.hide();
+    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -539,6 +558,58 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     }
   }
 
+  /**
+   * Schedule updating CSS vars that reserve space for visible side panels.
+   */
+  private _scheduleSidePanelWidthUpdate(): void {
+    if (this._sidePanelWidthUpdateFrame !== null) {
+      cancelAnimationFrame(this._sidePanelWidthUpdateFrame);
+    }
+    this._sidePanelWidthUpdateFrame = requestAnimationFrame(() => {
+      this._sidePanelWidthUpdateFrame = null;
+      this._updateSidePanelWidths();
+    });
+  }
+
+  /**
+   * Update side panel width CSS variables on the shell root.
+   */
+  private _updateSidePanelWidths(): void {
+    const leftWidth =
+      this._leftHandler.isVisible && this._leftHandler.panel.isVisible
+        ? Math.round(this._leftHandler.panel.node.getBoundingClientRect().width)
+        : 0;
+    const rightWidth =
+      this._rightHandler.isVisible && this._rightHandler.panel.isVisible
+        ? Math.round(
+            this._rightHandler.panel.node.getBoundingClientRect().width
+          )
+        : 0;
+    this.node.style.setProperty(
+      '--jp-private-left-panel-width',
+      `${leftWidth}px`
+    );
+    this.node.style.setProperty(
+      '--jp-private-right-panel-width',
+      `${rightWidth}px`
+    );
+    if (this.currentWidget && this.currentWidget.isAttached) {
+      MessageLoop.sendMessage(
+        this.currentWidget,
+        Widget.ResizeMessage.UnknownSize
+      );
+      const toolbar = (this.currentWidget as Widget & { toolbar?: Widget })
+        .toolbar;
+      if (toolbar && toolbar.isAttached) {
+        const { clientWidth, clientHeight } = toolbar.node;
+        MessageLoop.sendMessage(
+          toolbar,
+          new Widget.ResizeMessage(clientWidth, clientHeight)
+        );
+      }
+    }
+  }
+
   private _topWrapper: Panel;
   private _topHandler: PanelHandler;
   private _menuWrapper: Panel;
@@ -550,6 +621,8 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   private _skipLinkWidgetHandler: Private.SkipLinkWidgetHandler;
   private _main: Panel;
   private _downPanel: TabPanel;
+  private _sidePanelResizeObserver: ResizeObserver;
+  private _sidePanelWidthUpdateFrame: number | null = null;
   private _translator: ITranslator = nullTranslator;
   private _currentChanged = new Signal<this, FocusTracker.IChangedArgs<Widget>>(
     this
