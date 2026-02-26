@@ -35,6 +35,13 @@ describe('Shell for notebooks', () => {
       const widgets = Array.from(shell.widgets('top'));
       expect(widgets.length).toEqual(1);
     });
+
+    it('should place side panel stacks in the main compartment', () => {
+      const mainCompartment = shell.node.querySelector('#jp-main-compartment');
+      expect(mainCompartment).not.toBeNull();
+      expect(mainCompartment?.contains(shell.leftHandler.panel.node)).toBe(true);
+      expect(mainCompartment?.contains(shell.rightHandler.panel.node)).toBe(true);
+    });
   });
 
   describe('#widgets()', () => {
