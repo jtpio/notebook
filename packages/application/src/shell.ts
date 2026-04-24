@@ -264,7 +264,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   /**
    * Dispose of the shell.
    */
-  dispose(): void {
+  override dispose(): void {
     if (this.isDisposed) {
       return;
     }
