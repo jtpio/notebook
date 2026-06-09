@@ -130,9 +130,15 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     leftHandler.layoutChanged.connect(onSidePanelLayoutChanged);
     rightHandler.layoutChanged.connect(onSidePanelLayoutChanged);
 
+    // The compartment stacks the spacers and the main content in a CSS flex
+    // column, with the side panels absolutely positioned on its edges. Keeping
+    // the spacers inside means the side panels span the full height below the
+    // menu bar on every page, while the spacers only pad the content column.
     const mainCompartment = new Panel();
     mainCompartment.id = 'jp-main-compartment';
+    mainCompartment.addWidget(this._spacer_top);
     mainCompartment.addWidget(this._main);
+    mainCompartment.addWidget(this._spacer_bottom);
     mainCompartment.addWidget(leftHandler.panel);
     mainCompartment.addWidget(rightHandler.panel);
 
@@ -147,9 +153,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     const middlePanel = new Panel({ layout: middleLayout });
     middlePanel.addWidget(this._topWrapper);
     middlePanel.addWidget(this._menuWrapper);
-    middlePanel.addWidget(this._spacer_top);
     middlePanel.addWidget(mainCompartment);
-    middlePanel.addWidget(this._spacer_bottom);
     middlePanel.layout = middleLayout;
 
     const vsplitPanel = new SplitPanel();
