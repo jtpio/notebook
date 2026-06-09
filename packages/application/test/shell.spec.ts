@@ -39,8 +39,12 @@ describe('Shell for notebooks', () => {
     it('should place side panel stacks in the main compartment', () => {
       const mainCompartment = shell.node.querySelector('#jp-main-compartment');
       expect(mainCompartment).not.toBeNull();
-      expect(mainCompartment?.contains(shell.leftHandler.panel.node)).toBe(true);
-      expect(mainCompartment?.contains(shell.rightHandler.panel.node)).toBe(true);
+      expect(mainCompartment?.contains(shell.leftHandler.panel.node)).toBe(
+        true
+      );
+      expect(mainCompartment?.contains(shell.rightHandler.panel.node)).toBe(
+        true
+      );
     });
   });
 
@@ -119,6 +123,54 @@ describe('Shell for notebooks', () => {
       shell.add(widget, 'right');
       const widgets = Array.from(shell.widgets('right'));
       expect(widgets.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('#expandLeft()', () => {
+    it('should reserve the panel width on the shell root', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'left');
+      expect(shell.leftCollapsed).toBe(true);
+
+      shell.expandLeft('foo');
+      expect(shell.leftCollapsed).toBe(false);
+      expect(shell.node.classList.contains('jp-mod-left-panel-open')).toBe(
+        true
+      );
+      expect(
+        shell.node.style.getPropertyValue('--jp-private-left-panel-size')
+      ).toEqual('256px');
+
+      shell.collapseLeft();
+      expect(shell.leftCollapsed).toBe(true);
+      expect(shell.node.classList.contains('jp-mod-left-panel-open')).toBe(
+        false
+      );
+    });
+  });
+
+  describe('#expandRight()', () => {
+    it('should reserve the panel width on the shell root', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'right');
+      expect(shell.rightCollapsed).toBe(true);
+
+      shell.expandRight('foo');
+      expect(shell.rightCollapsed).toBe(false);
+      expect(shell.node.classList.contains('jp-mod-right-panel-open')).toBe(
+        true
+      );
+      expect(
+        shell.node.style.getPropertyValue('--jp-private-right-panel-size')
+      ).toEqual('256px');
+
+      shell.collapseRight();
+      expect(shell.rightCollapsed).toBe(true);
+      expect(shell.node.classList.contains('jp-mod-right-panel-open')).toBe(
+        false
+      );
     });
   });
 });

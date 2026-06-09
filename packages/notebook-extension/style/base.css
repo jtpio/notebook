@@ -21,59 +21,69 @@
 body[data-notebook='notebooks']
   .jp-NotebookPanel.jp-mod-fullwidth
   .jp-WindowedPanel-outer {
-  padding-left: unset;
-  padding-right: unset !important;
+  /* Span the full width, but never slide under an open side panel. */
+  padding-left: var(--jp-private-left-panel-width, 0px);
+  padding-right: var(--jp-private-right-panel-width, 0px) !important;
   width: unset;
 }
 
 /* Keep the notebook centered on the page */
 
 body[data-notebook='notebooks'] .jp-NotebookPanel-toolbar {
-  --jp-private-notebook-centered-gutter: max(
-    0px,
-    calc(
-      (
-          100% - var(--jp-notebook-max-width) -
-            var(--jp-notebook-padding-offset)
-        ) * 0.5
-    )
-  );
+  /*
+    Size the toolbar node to the space left beside any open side panels, using
+    the margins computed on `#main` (see base.css) so it stays aligned with
+    the notebook below it. The width is set (instead of paddings) so the
+    reactive toolbar measures its actual content area when collapsing items
+    into the overflow menu. The toolbar chrome (background, border and shadow)
+    is painted by the full-width strip below instead of the node itself.
+  */
+  margin-left: var(--jp-private-content-margin-left, 0px);
   width: calc(
-    100% -
-      max(
-        var(--jp-private-left-panel-width, 0px),
-        var(--jp-private-notebook-centered-gutter)
-      ) -
-      max(
-        var(--jp-private-right-panel-width, 0px),
-        var(--jp-private-notebook-centered-gutter)
-      )
+    100% - var(--jp-private-content-margin-left, 0px) -
+      var(--jp-private-content-margin-right, 0px)
   ) !important;
-  margin-left: max(
-    var(--jp-private-left-panel-width, 0px),
-    var(--jp-private-notebook-centered-gutter)
-  );
+  background: transparent;
+  border-bottom: none;
+  box-shadow: none;
+
+  /*
+    Lumino applies `contain: strict` inline; drop its `paint` containment so
+    the full-width background strip can be painted outside the node bounds.
+  */
+  contain: size layout style !important;
+}
+
+/*
+  Full-width background strip behind the toolbar, extending through the
+  content margins to the window edges. It carries the chrome the toolbar
+  would normally paint itself so the strip is seamless. Open side panels
+  (z-index 9) cover it, since the toolbar stacks below them (z-index 8).
+*/
+body[data-notebook='notebooks'] .jp-NotebookPanel-toolbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--jp-private-content-margin-left, 0px));
+  right: calc(-1 * var(--jp-private-content-margin-right, 0px));
+  z-index: -1;
+  background: var(--jp-toolbar-background);
+  border-bottom: var(--jp-border-width) solid var(--jp-toolbar-border-color);
+  box-shadow: var(--jp-toolbar-box-shadow);
 }
 
 body[data-notebook='notebooks'] .jp-WindowedPanel-outer {
-  --jp-private-notebook-centered-gutter: max(
-    0px,
-    calc(
-      (
-          100% - var(--jp-notebook-max-width) -
-            var(--jp-notebook-padding-offset)
-        ) * 0.5
-    )
-  );
   width: unset !important;
   padding-top: unset;
-  padding-left: max(
-    var(--jp-private-left-panel-width, 0px),
-    var(--jp-private-notebook-centered-gutter)
-  );
-  padding-right: max(
-    var(--jp-private-right-panel-width, 0px),
-    var(--jp-private-notebook-centered-gutter)
+  padding-left: var(--jp-private-content-margin-left, 0px);
+  /*
+    The scrollable area carries the vertical scrollbar, so its right padding is
+    reduced by half the padding offset to keep the notebook visually centered.
+  */
+  padding-right: calc(
+    var(--jp-private-content-margin-right, 0px) -
+      var(--jp-notebook-padding-offset) / 2
   ) !important;
   background: var(--jp-layout-color2);
 }

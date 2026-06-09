@@ -7,7 +7,7 @@ import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 
 import { find } from '@lumino/algorithm';
 import { JSONExt, PromiseDelegate, Token } from '@lumino/coreutils';
-import { MessageLoop } from '@lumino/messaging';
+import { Message, MessageLoop } from '@lumino/messaging';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import {
@@ -120,8 +120,12 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     // Hide the side panels by default.
     leftHandler.hide();
     rightHandler.hide();
-    const onSidePanelLayoutChanged = () => {
-      this._updateSidePanelWidths();
+
+    // Mirror each side panel's visibility and width onto CSS variables and
+    // classes on the shell root. The stylesheet uses them to size the panel and
+    // to reserve the matching amount of space for the centered main content.
+    const onSidePanelLayoutChanged = (handler: SidePanelHandler) => {
+      this._syncSidePanel(handler);
     };
     leftHandler.layoutChanged.connect(onSidePanelLayoutChanged);
     rightHandler.layoutChanged.connect(onSidePanelLayoutChanged);
@@ -178,19 +182,12 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
 
     this.layout = rootLayout;
 
-    this._sidePanelResizeObserver = new ResizeObserver(() => {
-      this._scheduleSidePanelWidthUpdate();
-    });
-    this._sidePanelResizeObserver.observe(leftHandler.panel.node);
-    this._sidePanelResizeObserver.observe(rightHandler.panel.node);
-
     // Added Skip to Main Link
     const skipLinkWidgetHandler = (this._skipLinkWidgetHandler =
       new Private.SkipLinkWidgetHandler(this));
 
     this.add(skipLinkWidgetHandler.skipLinkWidget, 'top', { rank: 0 });
     this._skipLinkWidgetHandler.show();
-    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -262,21 +259,6 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   }
 
   /**
-   * Dispose of the shell.
-   */
-  override dispose(): void {
-    if (this.isDisposed) {
-      return;
-    }
-    this._sidePanelResizeObserver.disconnect();
-    if (this._sidePanelWidthUpdateFrame !== null) {
-      cancelAnimationFrame(this._sidePanelWidthUpdateFrame);
-      this._sidePanelWidthUpdateFrame = null;
-    }
-    super.dispose();
-  }
-
-  /**
    * Getter and setter for the translator.
    */
   get translator(): ITranslator {
@@ -286,14 +268,16 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     if (value !== this._translator) {
       this._translator = value;
       const trans = value.load('notebook');
-      this._leftHandler.closeButton.title = trans.__(
-        'Collapse %1 side panel',
-        this._leftHandler.area
-      );
-      this._rightHandler.closeButton.title = trans.__(
-        'Collapse %1 side panel',
-        this._rightHandler.area
-      );
+      for (const handler of [this._leftHandler, this._rightHandler]) {
+        handler.closeButton.title = trans.__(
+          'Collapse %1 side panel',
+          handler.area
+        );
+        handler.resizeHandle.setAttribute(
+          'aria-label',
+          trans.__('Resize %1 side panel', handler.area)
+        );
+      }
     }
   }
 
@@ -508,9 +492,8 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    * Expand the left panel to show the sidebar with its widget.
    */
   expandLeft(id?: string): void {
-    this._leftHandler.panel.show();
+    this._leftHandler.show();
     this._leftHandler.expand(id); // Show the current widget, if any
-    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -518,17 +501,15 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    */
   collapseLeft(): void {
     this._leftHandler.collapse();
-    this._leftHandler.panel.hide();
-    this._scheduleSidePanelWidthUpdate();
+    this._leftHandler.hide();
   }
 
   /**
    * Expand the right panel to show the sidebar with its widget.
    */
   expandRight(id?: string): void {
-    this._rightHandler.panel.show();
+    this._rightHandler.show();
     this._rightHandler.expand(id); // Show the current widget, if any
-    this._scheduleSidePanelWidthUpdate();
   }
 
   /**
@@ -536,8 +517,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    */
   collapseRight(): void {
     this._rightHandler.collapse();
-    this._rightHandler.panel.hide();
-    this._scheduleSidePanelWidthUpdate();
+    this._rightHandler.hide();
   }
 
   /**
@@ -550,6 +530,16 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   }
 
   /**
+   * Sync the side panel state to the DOM once the shell is attached, in case
+   * a panel was expanded before the attachment.
+   */
+  protected override onAfterAttach(msg: Message): void {
+    super.onAfterAttach(msg);
+    this._syncSidePanel(this._leftHandler);
+    this._syncSidePanel(this._rightHandler);
+  }
+
+  /**
    * Handle a change on the down panel widgets
    */
   private _onTabPanelChanged(): void {
@@ -559,54 +549,53 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   }
 
   /**
-   * Schedule updating CSS vars that reserve space for visible side panels.
+   * Reflect a side panel's state onto the shell root so CSS can lay it out.
+   *
+   * The panel width, its position and the space reserved for the centered
+   * content are all derived in the stylesheet from a single CSS variable per
+   * side, which keeps them perfectly in sync (including while the viewport is
+   * resized, since the values are viewport-relative). The only thing CSS cannot
+   * do on its own is reflow the main content toolbar, so that is nudged here.
    */
-  private _scheduleSidePanelWidthUpdate(): void {
-    if (this._sidePanelWidthUpdateFrame !== null) {
-      cancelAnimationFrame(this._sidePanelWidthUpdateFrame);
+  private _syncSidePanel(handler: SidePanelHandler): void {
+    const area = handler.area;
+    const open = handler.panel.isVisible;
+    this.node.classList.toggle(`jp-mod-${area}-panel-open`, open);
+    if (open) {
+      this.node.style.setProperty(
+        `--jp-private-${area}-panel-size`,
+        `${handler.width}px`
+      );
     }
-    this._sidePanelWidthUpdateFrame = requestAnimationFrame(() => {
-      this._sidePanelWidthUpdateFrame = null;
-      this._updateSidePanelWidths();
-    });
+    // While the user is dragging the resize handle, defer the (relatively
+    // expensive) toolbar reflow until the drag ends: the content margins
+    // already follow the width through CSS and the windowed notebook observes
+    // its own size, so only the toolbar overflow lags, and only momentarily.
+    if (!handler.isResizing) {
+      this._notifyContentResized();
+    }
   }
 
   /**
-   * Update side panel width CSS variables on the shell root.
+   * Reflow the current main area widget after the content width changed.
+   *
+   * Opening, closing or resizing a side panel only changes CSS, so Lumino does
+   * not emit a resize message on its own. The notebook toolbar collapses its
+   * items into an overflow menu based on resize messages, hence this nudge.
    */
-  private _updateSidePanelWidths(): void {
-    const leftWidth =
-      this._leftHandler.isVisible && this._leftHandler.panel.isVisible
-        ? Math.round(this._leftHandler.panel.node.getBoundingClientRect().width)
-        : 0;
-    const rightWidth =
-      this._rightHandler.isVisible && this._rightHandler.panel.isVisible
-        ? Math.round(
-            this._rightHandler.panel.node.getBoundingClientRect().width
-          )
-        : 0;
-    this.node.style.setProperty(
-      '--jp-private-left-panel-width',
-      `${leftWidth}px`
-    );
-    this.node.style.setProperty(
-      '--jp-private-right-panel-width',
-      `${rightWidth}px`
-    );
-    if (this.currentWidget && this.currentWidget.isAttached) {
+  private _notifyContentResized(): void {
+    const current = this.currentWidget;
+    if (!current || !current.isAttached) {
+      return;
+    }
+    MessageLoop.sendMessage(current, Widget.ResizeMessage.UnknownSize);
+    const toolbar = (current as Widget & { toolbar?: Widget }).toolbar;
+    if (toolbar && toolbar.isAttached) {
+      const { clientWidth, clientHeight } = toolbar.node;
       MessageLoop.sendMessage(
-        this.currentWidget,
-        Widget.ResizeMessage.UnknownSize
+        toolbar,
+        new Widget.ResizeMessage(clientWidth, clientHeight)
       );
-      const toolbar = (this.currentWidget as Widget & { toolbar?: Widget })
-        .toolbar;
-      if (toolbar && toolbar.isAttached) {
-        const { clientWidth, clientHeight } = toolbar.node;
-        MessageLoop.sendMessage(
-          toolbar,
-          new Widget.ResizeMessage(clientWidth, clientHeight)
-        );
-      }
     }
   }
 
@@ -621,8 +610,6 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
   private _skipLinkWidgetHandler: Private.SkipLinkWidgetHandler;
   private _main: Panel;
   private _downPanel: TabPanel;
-  private _sidePanelResizeObserver: ResizeObserver;
-  private _sidePanelWidthUpdateFrame: number | null = null;
   private _translator: ITranslator = nullTranslator;
   private _currentChanged = new Signal<this, FocusTracker.IChangedArgs<Widget>>(
     this

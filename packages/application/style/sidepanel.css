@@ -11,76 +11,146 @@
 
 :root {
   --jp-private-sidebar-tab-width: 32px;
-  --jp-private-sidebar-min-width: 180px;
-  --jp-private-sidebar-width: var(--jp-sidebar-min-width);
-  --jp-private-sidebar-close-size: 24px;
-  --jp-private-sidebar-resize-handle-size: 10px;
+
+  /* Width of the (mostly transparent) strip that captures resize drags. */
+  --jp-private-sidebar-resize-handle-size: 8px;
 }
 
 /*-----------------------------------------------------------------------------
-| SideBar
+| Side panels
+|
+| The left and right panels are absolutely positioned inside the main
+| compartment, below the top and menu bars (so the header stays full width and
+| fixed). Each panel is anchored to its window edge, in the empty space beside
+| the centered content. The panel width and the space reserved for the content
+| both derive from the `--jp-private-{left,right}-panel-width` variables
+| computed on `#main` (see base.css), which keeps panel and content in
+| lockstep: the content does not move while a panel fits in the empty space,
+| and is pushed only once the panel needs the room.
 |----------------------------------------------------------------------------*/
-
-/* Stack panels */
 
 #jp-right-stack,
 #jp-left-stack {
-  display: flex;
-  flex-direction: column;
-  min-width: var(--jp-private-sidebar-min-width);
-  width: var(--jp-private-sidebar-width);
+  /*
+    JupyterLab sizes side panel children against --jp-sidebar-min-width
+    (250px). Align it with our narrower minimum so inherited rules do not force
+    the panel contents wider than the panel itself.
+  */
+  --jp-sidebar-min-width: var(--jp-private-side-panel-min-width);
   position: absolute;
   top: 0;
   bottom: 0;
   z-index: 9;
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: var(--jp-layout-color1);
-  box-shadow: var(--jp-elevation-z2);
 }
 
 #jp-left-stack {
-  left: max(
-    0px,
-    calc(
-      (100% - var(--jp-notebook-max-width)) / 2 - var(--jp-private-sidebar-width)
-    )
-  );
-  border-right: var(--jp-border-width) solid var(--jp-border-color2);
+  /* Flush to the window edge; the content is centered in the space beside it. */
+  left: 0;
+  width: var(--jp-private-left-panel-width, 0px);
+  border-right: var(--jp-border-width) solid var(--jp-border-color1);
 }
 
 #jp-right-stack {
-  right: max(
-    0px,
-    calc(
-      (100% - var(--jp-notebook-max-width)) / 2 - var(--jp-private-sidebar-width)
-    )
-  );
-  border-left: var(--jp-border-width) solid var(--jp-border-color2);
-}
-
-#jp-left-stack .jp-SidePanel-closeWidget,
-#jp-right-stack .jp-SidePanel-closeWidget {
-  position: absolute;
-  top: 0;
-  left: 0;
   right: 0;
-  height: 0;
-  min-height: 0;
-  background: transparent;
-  pointer-events: none;
-  z-index: 13;
+  width: var(--jp-private-right-panel-width, 0px);
+  border-left: var(--jp-border-width) solid var(--jp-border-color1);
 }
 
+/* The stacked panel holding the actual side panel widgets. */
+#jp-left-stack .lm-StackedPanel,
+#jp-right-stack .lm-StackedPanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*-----------------------------------------------------------------------------
+| Collapse (close) button
+|
+| A compact header strip pins the collapse button to the inner corner of the
+| panel without overlapping a widget's own header or toolbar.
+|----------------------------------------------------------------------------*/
+
+.jp-SidePanel-collapseHeader {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 0;
+  padding: 2px;
+}
+
+#jp-left-stack .jp-SidePanel-collapseHeader {
+  /* Keep the button clear of the resize handle on the right edge. */
+  justify-content: flex-end;
+  padding-right: 6px;
+}
+
+#jp-right-stack .jp-SidePanel-collapseHeader {
+  justify-content: flex-start;
+  padding-left: 6px;
+}
+
+#jp-left-stack .jp-SidePanel-collapse,
+#jp-right-stack .jp-SidePanel-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--jp-border-radius);
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+/* The close icon inherits the button color so it is visible on the panel. */
+#jp-left-stack .jp-SidePanel-collapse svg,
+#jp-right-stack .jp-SidePanel-collapse svg,
+#jp-left-stack .jp-SidePanel-collapse svg path,
+#jp-right-stack .jp-SidePanel-collapse svg path {
+  fill: currentColor;
+}
+
+#jp-left-stack .jp-SidePanel-collapse:hover,
+#jp-right-stack .jp-SidePanel-collapse:hover {
+  background: var(--jp-layout-color2);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:active,
+#jp-right-stack .jp-SidePanel-collapse:active {
+  background: var(--jp-layout-color3);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:focus-visible,
+#jp-right-stack .jp-SidePanel-collapse:focus-visible {
+  outline: 2px solid var(--accent-fill-focus, var(--jp-brand-color1));
+  outline-offset: 1px;
+}
+
+/*-----------------------------------------------------------------------------
+| Resize handle
+|
+| A thin, mostly transparent strip overlaying the inner edge of the panel. A
+| 2px guide becomes visible on hover and while dragging.
+|----------------------------------------------------------------------------*/
+
+/*
+  The overlay must stay transparent so it does not hide the panel content.
+  Scoped under the stack id to override JupyterLab's
+  `#jp-{left,right}-stack > .lm-Widget` background rule.
+*/
 #jp-left-stack .jp-SidePanel-resizeWidget,
 #jp-right-stack .jp-SidePanel-resizeWidget {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
   background: transparent;
   pointer-events: none;
-  z-index: 12;
 }
 
 #jp-left-stack .jp-SidePanel-resizeHandle,
@@ -89,108 +159,52 @@
   top: 0;
   bottom: 0;
   width: var(--jp-private-sidebar-resize-handle-size);
+  background: transparent;
+  cursor: ew-resize;
   touch-action: none;
   pointer-events: auto;
 }
 
 #jp-left-stack .jp-SidePanel-resizeHandle {
   right: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
-  cursor: ew-resize;
 }
 
 #jp-right-stack .jp-SidePanel-resizeHandle {
   left: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
-  cursor: ew-resize;
 }
 
-#jp-left-stack .jp-SidePanel-resizeHandle::after,
-#jp-right-stack .jp-SidePanel-resizeHandle::after {
+.jp-SidePanel-resizeHandle::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  width: var(--jp-border-width);
-  background: var(--jp-border-color2);
+  width: 2px;
+  background: var(--jp-brand-color1);
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
 #jp-left-stack .jp-SidePanel-resizeHandle::after {
-  left: calc(var(--jp-private-sidebar-resize-handle-size) / 2);
+  left: calc(var(--jp-private-sidebar-resize-handle-size) / 2 - 1px);
 }
 
 #jp-right-stack .jp-SidePanel-resizeHandle::after {
-  right: calc(var(--jp-private-sidebar-resize-handle-size) / 2);
+  right: calc(var(--jp-private-sidebar-resize-handle-size) / 2 - 1px);
 }
 
-#jp-left-stack .jp-SidePanel-resizeHandle:hover::after,
-#jp-right-stack .jp-SidePanel-resizeHandle:hover::after,
-body.jp-mod-resizing-sidepanel #jp-left-stack .jp-SidePanel-resizeHandle::after,
-body.jp-mod-resizing-sidepanel
-  #jp-right-stack
-  .jp-SidePanel-resizeHandle::after {
+.jp-SidePanel-resizeHandle:hover::after,
+.jp-SidePanel-resizeHandle:focus-visible::after,
+body.jp-mod-resizing-sidepanel .jp-SidePanel-resizeHandle::after {
   opacity: 1;
 }
 
-#jp-left-stack .jp-SidePanel-collapse,
-#jp-right-stack .jp-SidePanel-collapse {
-  display: flex;
-  position: absolute;
-  top: 4px;
-  z-index: 1;
-  width: var(--jp-private-sidebar-close-size);
-  min-width: var(--jp-private-sidebar-close-size);
-  height: var(--jp-private-sidebar-close-size);
-  min-height: var(--jp-private-sidebar-close-size);
-  padding: 0;
-  border-radius: var(--jp-border-radius);
-  border: var(--jp-border-width) solid var(--jp-border-color2);
-  background: var(--jp-layout-color2);
-  color: var(--jp-ui-font-color1);
-  box-shadow: none;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 120ms ease;
-  pointer-events: auto;
+/* The visible guide doubles as the focus indicator for keyboard resizing. */
+.jp-SidePanel-resizeHandle:focus-visible {
+  outline: none;
 }
 
-#jp-left-stack .jp-SidePanel-collapse {
-  right: 4px;
-}
-
-#jp-right-stack .jp-SidePanel-collapse {
-  left: 4px;
-}
-
-#jp-left-stack .jp-SidePanel-collapseLabel,
-#jp-right-stack .jp-SidePanel-collapseLabel {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1;
-  pointer-events: none;
-  transform: translateY(-0.5px);
-}
-
-#jp-left-stack .jp-SidePanel-collapse:hover,
-#jp-right-stack .jp-SidePanel-collapse:hover {
-  background: var(--jp-layout-color3);
-  border-color: var(--jp-border-color1);
-}
-
-#jp-left-stack .jp-SidePanel-collapse:focus-visible,
-#jp-right-stack .jp-SidePanel-collapse:focus-visible {
-  outline: 2px solid var(--accent-fill-focus, var(--jp-brand-color1));
-  outline-offset: 2px;
-}
-
-#jp-left-stack .jp-SidePanel-collapse:active,
-#jp-right-stack .jp-SidePanel-collapse:active {
-  background: var(--jp-layout-color1);
-}
-
-#jp-left-stack .lm-StackedPanel,
-#jp-right-stack .lm-StackedPanel {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
+/* Keep a consistent resize cursor and avoid text selection while dragging. */
+body.jp-mod-resizing-sidepanel {
+  cursor: ew-resize;
+  user-select: none;
 }

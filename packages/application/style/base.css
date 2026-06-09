@@ -21,14 +21,87 @@ body.jp-ThemedContainer {
 }
 
 #main.jp-ThemedContainer {
+  /* Smallest a side panel may become, and its width when first opened. */
+  --jp-private-side-panel-min-width: 180px;
+  --jp-private-left-panel-size: 256px;
+  --jp-private-right-panel-size: 256px;
+
+  /*
+    The effective width reserved for each side panel. It is 0 while the panel
+    is collapsed; the `jp-mod-*-panel-open` rules below switch it to the
+    (clamped) panel size. Both the panel itself and the space reserved for the
+    centered content derive from this single value, so they can never disagree.
+  */
   --jp-private-left-panel-width: 0px;
   --jp-private-right-panel-width: 0px;
+
+  /*
+    Upper bound for a side panel: never so wide that the main content would get
+    less than this much room. Mirrored by `clampWidth()` in panelhandler.ts so
+    the width tracked while dragging matches what is rendered here.
+
+    Sizes are viewport-relative (`100vw` equals the window width since the page
+    itself never scrolls) rather than `100%`, so the variables resolve to the
+    same value wherever they are consumed, whatever the containing block.
+  */
+  --jp-private-side-panel-max-width: max(
+    var(--jp-private-side-panel-min-width),
+    calc((100vw - 520px) / 2)
+  );
+
+  /*
+    Gutter that centers the content (capped at its max width) within the full
+    window. It is intentionally independent of the side panels so that the
+    content does not move when a panel is opened or resized.
+  */
+  --jp-private-content-gutter: max(
+    0px,
+    calc((100vw - var(--jp-notebook-max-width)) / 2)
+  );
+
+  /*
+    Space reserved on each side of the content: the centering gutter, or the
+    side panel width once the panel no longer fits within the gutter. While a
+    panel fits in the empty space beside the content, opening or resizing it
+    moves nothing; the panel only pushes the content (and the top/menu chrome,
+    which use the same margins and therefore stay aligned) when it actually
+    needs the room.
+  */
+  --jp-private-content-margin-left: max(
+    var(--jp-private-left-panel-width, 0px),
+    var(--jp-private-content-gutter)
+  );
+  --jp-private-content-margin-right: max(
+    var(--jp-private-right-panel-width, 0px),
+    var(--jp-private-content-gutter)
+  );
+
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background: var(--jp-layout-color2);
+}
+
+/*
+  When a side panel is open, reserve its (clamped) width. Declared after the
+  block above so it wins for the open state at equal specificity.
+*/
+#main.jp-mod-left-panel-open {
+  --jp-private-left-panel-width: clamp(
+    var(--jp-private-side-panel-min-width),
+    var(--jp-private-left-panel-size),
+    var(--jp-private-side-panel-max-width)
+  );
+}
+
+#main.jp-mod-right-panel-open {
+  --jp-private-right-panel-width: clamp(
+    var(--jp-private-side-panel-min-width),
+    var(--jp-private-right-panel-size),
+    var(--jp-private-side-panel-max-width)
+  );
 }
 
 #top-panel-wrapper {
@@ -42,9 +115,10 @@ body.jp-ThemedContainer {
   min-height: calc(1.5 * var(--jp-private-topbar-height));
   padding-left: 5px;
   padding-right: 5px;
-  margin-left: auto;
-  margin-right: auto;
-  max-width: 1200px;
+  /* Keep the top bar aligned with the centered content beside the panels. */
+  margin-left: var(--jp-private-content-margin-left, auto);
+  margin-right: var(--jp-private-content-margin-right, auto);
+  max-width: var(--jp-notebook-max-width);
 }
 
 #menu-panel-wrapper {
@@ -60,8 +134,9 @@ body.jp-ThemedContainer {
   background: var(--jp-layout-color1);
   padding-left: 5px;
   padding-right: 5px;
-  margin-left: auto;
-  margin-right: auto;
+  /* Keep the menu aligned with the centered content beside the panels. */
+  margin-left: var(--jp-private-content-margin-left, auto);
+  margin-right: var(--jp-private-content-margin-right, auto);
   max-width: var(--jp-notebook-max-width);
 }
 
@@ -76,10 +151,10 @@ body.jp-ThemedContainer {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
   max-width: var(--jp-notebook-max-width);
+  /* Center the content within the space beside any open side panels. */
+  margin-left: var(--jp-private-content-margin-left, auto);
+  margin-right: var(--jp-private-content-margin-right, auto);
 }
 
 #spacer-widget-top {
