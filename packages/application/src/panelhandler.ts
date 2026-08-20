@@ -81,6 +81,7 @@ export class SidePanelHandler extends PanelHandler {
     this._widgetPanel.widgetRemoved.connect(this._onWidgetRemoved, this);
 
     this._closeButton = document.createElement('button');
+    this._closeButton.type = 'button';
     closeIcon.element({
       container: this._closeButton,
       height: '16px',
@@ -94,9 +95,37 @@ export class SidePanelHandler extends PanelHandler {
     this._closeButton.className = 'jp-Button jp-SidePanel-collapse';
     this._closeButton.title = trans.__('Collapse side panel');
 
-    const icon = new Widget({ node: this._closeButton });
-    this._panel.addWidget(icon);
+    this._panel.addWidget(new Widget({ node: this._closeButton }));
     this._panel.addWidget(this._widgetPanel);
+
+    this._resizeHandle = document.createElement('div');
+    this._resizeHandle.className = 'jp-SidePanel-resizeHandle';
+    this._resizeHandle.setAttribute('role', 'separator');
+    this._resizeHandle.setAttribute('aria-orientation', 'vertical');
+    this._resizeHandle.setAttribute(
+      'aria-label',
+      trans.__('Resize %1 side panel', area)
+    );
+    this._resizeHandle.tabIndex = 0;
+    this._updateResizeHandleAria();
+    this._resizeHandle.addEventListener(
+      'pointerdown',
+      this._onResizePointerDown
+    );
+    this._resizeHandle.addEventListener(
+      'pointermove',
+      this._onResizePointerMove
+    );
+    this._resizeHandle.addEventListener('pointerup', this._onResizePointerUp);
+    this._resizeHandle.addEventListener(
+      'pointercancel',
+      this._onResizePointerUp
+    );
+    this._resizeHandle.addEventListener('dblclick', () => {
+      this._setWidth(Private.DEFAULT_WIDTH);
+    });
+    this._resizeHandle.addEventListener('keydown', this._onResizeHandleKeyDown);
+    this._panel.addWidget(new Widget({ node: this._resizeHandle }));
   }
 
   /**
@@ -153,10 +182,40 @@ export class SidePanelHandler extends PanelHandler {
   }
 
   /**
+   * Signal fired when the side panel visibility or width changes.
+   */
+  get layoutChanged(): ISignal<SidePanelHandler, void> {
+    return this._layoutChanged;
+  }
+
+  /**
+   * The desired width of the side panel, in pixels. The shell mirrors it onto
+   * a CSS variable that drives both the panel size and the space reserved for
+   * the content; the rendered width may be smaller on narrow viewports.
+   */
+  get width(): number {
+    return this._width;
+  }
+
+  /**
+   * Whether the user is currently dragging the resize handle.
+   */
+  get isResizing(): boolean {
+    return this._isResizing;
+  }
+
+  /**
    * Get the close button element.
    */
   get closeButton(): HTMLButtonElement {
     return this._closeButton;
+  }
+
+  /**
+   * Get the resize handle element.
+   */
+  get resizeHandle(): HTMLElement {
+    return this._resizeHandle;
   }
 
   /**
@@ -232,16 +291,24 @@ export class SidePanelHandler extends PanelHandler {
    * Hide the side panel
    */
   hide(): void {
+    if (this._isHiddenByUser) {
+      return;
+    }
     this._isHiddenByUser = true;
     this._refreshVisibility();
+    this._layoutChanged.emit(undefined);
   }
 
   /**
    * Show the side panel
    */
   show(): void {
+    if (!this._isHiddenByUser) {
+      return;
+    }
     this._isHiddenByUser = false;
     this._refreshVisibility();
+    this._layoutChanged.emit(undefined);
   }
 
   /**
@@ -272,6 +339,113 @@ export class SidePanelHandler extends PanelHandler {
     this._panel.setHidden(this._isHiddenByUser);
   }
 
+  /**
+   * Start a resize drag, capturing subsequent pointer events on the handle.
+   */
+  private _onResizePointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this._resizeHandle.setPointerCapture(event.pointerId);
+    this._resizeStartX = event.clientX;
+    this._resizeStartWidth = this._panel.node.getBoundingClientRect().width;
+    this._isResizing = true;
+    document.body.classList.add('jp-mod-resizing-sidepanel');
+  };
+
+  /**
+   * Resize the panel while dragging.
+   */
+  private _onResizePointerMove = (event: PointerEvent): void => {
+    if (!this._isResizing) {
+      return;
+    }
+    event.preventDefault();
+    const delta = event.clientX - this._resizeStartX;
+    this._setWidth(
+      this._resizeStartWidth + (this._area === 'left' ? delta : -delta)
+    );
+  };
+
+  /**
+   * End panel resizing.
+   */
+  private _onResizePointerUp = (): void => {
+    if (!this._isResizing) {
+      return;
+    }
+    this._isResizing = false;
+    document.body.classList.remove('jp-mod-resizing-sidepanel');
+    MessageLoop.sendMessage(
+      this._widgetPanel,
+      Widget.ResizeMessage.UnknownSize
+    );
+    // Run the toolbar reflow that was deferred while dragging.
+    this._layoutChanged.emit(undefined);
+  };
+
+  /**
+   * Resize the panel with the keyboard when the resize handle is focused.
+   */
+  private _onResizeHandleKeyDown = (event: KeyboardEvent): void => {
+    const step = event.shiftKey ? 32 : 8;
+    // Step from the rendered width so the first key press always has a
+    // visible effect, even when the viewport clamped the desired width.
+    const rendered =
+      this._panel.node.getBoundingClientRect().width || this._width;
+    let width: number;
+    switch (event.key) {
+      case 'ArrowLeft':
+        width = rendered + (this._area === 'left' ? -step : step);
+        break;
+      case 'ArrowRight':
+        width = rendered + (this._area === 'left' ? step : -step);
+        break;
+      case 'Home':
+        width = Private.MIN_WIDTH;
+        break;
+      case 'End':
+        width = Private.maxWidth();
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this._setWidth(width);
+  };
+
+  /**
+   * Set the desired panel width, clamped to the allowed range.
+   */
+  private _setWidth(width: number): void {
+    const clamped = Private.clampWidth(width);
+    if (clamped === this._width) {
+      return;
+    }
+    this._width = clamped;
+    this._updateResizeHandleAria();
+    // Emit first so the shell updates the CSS variable before the panel
+    // contents relayout against the new node size.
+    this._layoutChanged.emit(undefined);
+    MessageLoop.sendMessage(
+      this._widgetPanel,
+      Widget.ResizeMessage.UnknownSize
+    );
+  }
+
+  /**
+   * Reflect the width range and current value on the separator for assistive
+   * technologies.
+   */
+  private _updateResizeHandleAria(): void {
+    this._resizeHandle.setAttribute('aria-valuemin', `${Private.MIN_WIDTH}`);
+    this._resizeHandle.setAttribute('aria-valuemax', `${Private.maxWidth()}`);
+    this._resizeHandle.setAttribute('aria-valuenow', `${this._width}`);
+  }
+
   /*
    * Handle the `widgetRemoved` signal from the panel.
    */
@@ -287,14 +461,20 @@ export class SidePanelHandler extends PanelHandler {
   }
 
   private _area: SidePanel.Area;
-  private _isHiddenByUser = false;
+  private _isHiddenByUser = true;
   private _widgetPanel: StackedPanel;
   private _currentWidget: Widget | null;
   private _lastCurrentWidget: Widget | null;
   private _closeButton: HTMLButtonElement;
+  private _resizeHandle: HTMLDivElement;
+  private _isResizing = false;
+  private _resizeStartX = 0;
+  private _resizeStartWidth = 0;
+  private _width = Private.DEFAULT_WIDTH;
   private _widgetAdded: Signal<SidePanelHandler, Widget> = new Signal(this);
   private _widgetRemoved: Signal<SidePanelHandler, Widget> = new Signal(this);
   private _translator: ITranslator = nullTranslator;
+  private _layoutChanged: Signal<SidePanelHandler, void> = new Signal(this);
 }
 
 /**
@@ -419,6 +599,42 @@ type SidePanelPaletteOption = {
  * A namespace for private module data.
  */
 namespace Private {
+  /**
+   * The default side panel width, in pixels. Matches the initial
+   * `--jp-private-{left,right}-panel-size` values in style/base.css.
+   */
+  export const DEFAULT_WIDTH = 256;
+
+  /**
+   * The minimum side panel width, in pixels. Matches
+   * `--jp-private-side-panel-min-width` in style/base.css.
+   */
+  export const MIN_WIDTH = 180;
+
+  /**
+   * The minimum width kept for the main content, in pixels. Matches the value
+   * in `--jp-private-side-panel-max-width` in style/base.css so the width
+   * tracked while dragging is the one actually rendered.
+   */
+  export const MIN_CONTENT_WIDTH = 520;
+
+  /**
+   * The widest a side panel may currently be.
+   */
+  export function maxWidth(): number {
+    return Math.max(
+      MIN_WIDTH,
+      Math.round((window.innerWidth - MIN_CONTENT_WIDTH) / 2)
+    );
+  }
+
+  /**
+   * Clamp a side panel width to the range allowed by the current viewport.
+   */
+  export function clampWidth(width: number): number {
+    return Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(width)));
+  }
+
   /**
    * An object which holds a widget and its sort rank.
    */

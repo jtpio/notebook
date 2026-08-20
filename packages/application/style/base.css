@@ -21,12 +21,81 @@ body.jp-ThemedContainer {
 }
 
 #main.jp-ThemedContainer {
+  --jp-private-side-panel-min-width: 180px;
+
+  /*
+    Desired panel widths; the shell overwrites these inline when resizing.
+  */
+  --jp-private-left-panel-size: 256px;
+  --jp-private-right-panel-size: 256px;
+
+  /*
+    Width actually reserved for each side panel: 0 while collapsed, the
+    clamped panel size while open (see the jp-mod-*-panel-open rules below).
+  */
+  --jp-private-left-panel-width: 0px;
+  --jp-private-right-panel-width: 0px;
+
+  /*
+    Never let a panel squeeze the main content below 520px (mirrored by
+    clampWidth() in panelhandler.ts). Sizes are viewport-relative — 100vw,
+    not 100% — so the variables resolve to the same value whatever the
+    consumer's containing block.
+  */
+  --jp-private-side-panel-max-width: max(
+    var(--jp-private-side-panel-min-width),
+    calc((100vw - 520px) / 2)
+  );
+
+  /*
+    Gutter centering the content within the full window, independent of the
+    panels so the content does not move while a panel fits inside it.
+  */
+  --jp-private-content-gutter: max(
+    0px,
+    calc((100vw - var(--jp-notebook-max-width)) / 2)
+  );
+
+  /*
+    Space kept on each side of the content: a panel pushes the content (and
+    the top/menu chrome, which share these margins and so stay aligned) only
+    once it outgrows the gutter.
+  */
+  --jp-private-content-margin-left: max(
+    var(--jp-private-left-panel-width),
+    var(--jp-private-content-gutter)
+  );
+  --jp-private-content-margin-right: max(
+    var(--jp-private-right-panel-width),
+    var(--jp-private-content-gutter)
+  );
+
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background: var(--jp-layout-color2);
+}
+
+/*
+  Reserve the (clamped) width of an open panel. Declared after the block
+  above so it wins at equal specificity.
+*/
+#main.jp-mod-left-panel-open {
+  --jp-private-left-panel-width: clamp(
+    var(--jp-private-side-panel-min-width),
+    var(--jp-private-left-panel-size),
+    var(--jp-private-side-panel-max-width)
+  );
+}
+
+#main.jp-mod-right-panel-open {
+  --jp-private-right-panel-width: clamp(
+    var(--jp-private-side-panel-min-width),
+    var(--jp-private-right-panel-size),
+    var(--jp-private-side-panel-max-width)
+  );
 }
 
 #top-panel-wrapper {
@@ -40,9 +109,9 @@ body.jp-ThemedContainer {
   min-height: calc(1.5 * var(--jp-private-topbar-height));
   padding-left: 5px;
   padding-right: 5px;
-  margin-left: auto;
-  margin-right: auto;
-  max-width: 1200px;
+  margin-left: var(--jp-private-content-margin-left);
+  margin-right: var(--jp-private-content-margin-right);
+  max-width: var(--jp-notebook-max-width);
 }
 
 #menu-panel-wrapper {
@@ -58,15 +127,25 @@ body.jp-ThemedContainer {
   background: var(--jp-layout-color1);
   padding-left: 5px;
   padding-right: 5px;
-  margin-left: auto;
-  margin-right: auto;
+  margin-left: var(--jp-private-content-margin-left);
+  margin-right: var(--jp-private-content-margin-right);
   max-width: var(--jp-notebook-max-width);
 }
 
+#jp-main-compartment {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 #main-panel {
-  margin-left: auto;
-  margin-right: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   max-width: var(--jp-notebook-max-width);
+  margin-left: var(--jp-private-content-margin-left);
+  margin-right: var(--jp-private-content-margin-right);
 }
 
 #spacer-widget-top {

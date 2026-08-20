@@ -11,38 +11,214 @@
 
 :root {
   --jp-private-sidebar-tab-width: 32px;
+  --jp-private-sidebar-resize-handle-size: 8px;
+  --jp-private-sidebar-collapse-button-size: 24px;
 }
 
 /*-----------------------------------------------------------------------------
-| SideBar
+| Side panels
+|
+| Each panel is absolutely positioned against its window edge, below the
+| full-width chrome, in the space beside the centered content. The panel
+| width and the content margins both derive from the
+| --jp-private-{left,right}-panel-width variables computed on #main (see
+| base.css), so the content only moves when a panel outgrows the gutter.
 |----------------------------------------------------------------------------*/
-
-/* Stack panels */
 
 #jp-right-stack,
 #jp-left-stack {
+  /*
+    Align JupyterLab's sidebar minimum (250px) with ours so inherited rules
+    do not force the panel contents wider than the panel.
+  */
+  --jp-sidebar-min-width: var(--jp-private-side-panel-min-width);
+
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 9;
   display: flex;
   flex-direction: column;
-  min-width: var(--jp-sidebar-min-width);
+  min-width: 0;
+  background: var(--jp-layout-color1);
 }
 
-#jp-left-stack .jp-SidePanel-collapse,
-#jp-right-stack .jp-SidePanel-collapse {
-  display: flex;
-  flex: 0 0 auto;
-  min-height: 0;
-  padding: 0;
+#jp-left-stack {
+  left: 0;
+  width: var(--jp-private-left-panel-width);
+  border-right: var(--jp-border-width) solid var(--jp-border-color1);
 }
 
-#jp-left-stack .jp-SidePanel-collapse {
-  justify-content: right;
+#jp-right-stack {
+  right: 0;
+  width: var(--jp-private-right-panel-width);
+  border-left: var(--jp-border-width) solid var(--jp-border-color1);
 }
 
-#jp-right-stack .jp-SidePanel-collapse {
-  justify-content: left;
+/*
+  On notebook pages the panels start below the full-width toolbar strip
+  (see the notebook-extension styles), the same way they start below the
+  menu bar on the other pages.
+*/
+body[data-notebook='notebooks'] #jp-right-stack,
+body[data-notebook='notebooks'] #jp-left-stack {
+  top: var(--jp-private-toolbar-height, 0px);
 }
 
 #jp-left-stack .lm-StackedPanel,
 #jp-right-stack .lm-StackedPanel {
   flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*-----------------------------------------------------------------------------
+| Collapse (close) button
+|
+| Pinned into the top inner corner of the panel, on its own row so it never
+| covers a widget's own header. The resize handle starts below it to keep
+| the flush button edge clickable.
+|----------------------------------------------------------------------------*/
+
+#jp-left-stack .jp-SidePanel-collapse,
+#jp-right-stack .jp-SidePanel-collapse {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /*
+    The min sizes override both the larger .jp-Button defaults and the
+    sidebar minimum JupyterLab sets on the stacks' direct children.
+  */
+  width: var(--jp-private-sidebar-collapse-button-size);
+  min-width: var(--jp-private-sidebar-collapse-button-size);
+  height: var(--jp-private-sidebar-collapse-button-size);
+  min-height: var(--jp-private-sidebar-collapse-button-size);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--jp-ui-font-color1);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+/*
+  The button hugs the panel's top edge and inner border, so only its free,
+  interior-facing corner is rounded.
+*/
+#jp-left-stack .jp-SidePanel-collapse {
+  align-self: flex-end;
+  border-radius: 0 0 0 var(--jp-border-radius);
+}
+
+#jp-right-stack .jp-SidePanel-collapse {
+  align-self: flex-start;
+  border-radius: 0 0 var(--jp-border-radius) 0;
+}
+
+/*
+  Force the themed icon fill to follow the button color.
+*/
+#jp-left-stack .jp-SidePanel-collapse svg,
+#jp-right-stack .jp-SidePanel-collapse svg,
+#jp-left-stack .jp-SidePanel-collapse svg path,
+#jp-right-stack .jp-SidePanel-collapse svg path {
+  fill: currentColor;
+}
+
+#jp-left-stack .jp-SidePanel-collapse:hover,
+#jp-right-stack .jp-SidePanel-collapse:hover {
+  background: var(--jp-layout-color2);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:active,
+#jp-right-stack .jp-SidePanel-collapse:active {
+  background: var(--jp-layout-color3);
+}
+
+#jp-left-stack .jp-SidePanel-collapse:focus-visible,
+#jp-right-stack .jp-SidePanel-collapse:focus-visible {
+  outline: 2px solid var(--accent-fill-focus, var(--jp-brand-color1));
+
+  /*
+    Inset, since the button touches the panel edges.
+  */
+  outline-offset: -2px;
+}
+
+/*-----------------------------------------------------------------------------
+| Resize handle
+|
+| A thin, mostly transparent strip overlaying the inner edge of the panel,
+| centered on the border and half overhanging the content. A 2px guide
+| becomes visible on hover, focus and while dragging.
+|----------------------------------------------------------------------------*/
+
+#jp-left-stack .jp-SidePanel-resizeHandle,
+#jp-right-stack .jp-SidePanel-resizeHandle {
+  position: absolute;
+
+  /*
+    Below the collapse button, which sits flush against the same edge and
+    would otherwise be covered.
+  */
+  top: var(--jp-private-sidebar-collapse-button-size);
+  bottom: 0;
+  width: var(--jp-private-sidebar-resize-handle-size);
+
+  /*
+    Override the size and background JupyterLab gives the stacks' direct
+    children.
+  */
+  min-width: 0;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle {
+  right: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
+}
+
+#jp-right-stack .jp-SidePanel-resizeHandle {
+  left: calc(var(--jp-private-sidebar-resize-handle-size) / -2);
+}
+
+.jp-SidePanel-resizeHandle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--jp-brand-color1);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+#jp-left-stack .jp-SidePanel-resizeHandle::after {
+  left: calc(var(--jp-private-sidebar-resize-handle-size) / 2 - 1px);
+}
+
+#jp-right-stack .jp-SidePanel-resizeHandle::after {
+  right: calc(var(--jp-private-sidebar-resize-handle-size) / 2 - 1px);
+}
+
+.jp-SidePanel-resizeHandle:hover::after,
+.jp-SidePanel-resizeHandle:focus-visible::after,
+body.jp-mod-resizing-sidepanel .jp-SidePanel-resizeHandle::after {
+  opacity: 1;
+}
+
+/*
+  The visible guide doubles as the focus indicator.
+*/
+.jp-SidePanel-resizeHandle:focus-visible {
+  outline: none;
+}
+
+body.jp-mod-resizing-sidepanel {
+  cursor: ew-resize;
+  user-select: none;
 }

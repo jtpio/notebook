@@ -7,6 +7,7 @@ import { ITranslator, nullTranslator } from '@jupyterlab/translation';
 
 import { find } from '@lumino/algorithm';
 import { JSONExt, PromiseDelegate, Token } from '@lumino/coreutils';
+import { Message, MessageLoop } from '@lumino/messaging';
 import { ISignal, Signal } from '@lumino/signaling';
 
 import {
@@ -121,9 +122,19 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     rightHandler.panel.id = 'jp-right-stack';
     rightHandler.panel.node.setAttribute('role', 'complementary');
 
-    // Hide the side panels by default.
-    leftHandler.hide();
-    rightHandler.hide();
+    leftHandler.layoutChanged.connect(this._syncSidePanel, this);
+    rightHandler.layoutChanged.connect(this._syncSidePanel, this);
+
+    // The side panels are absolutely positioned over the compartment edges;
+    // keeping the spacers inside it lets the panels span the full height below
+    // the menu bar while the spacers pad only the content column.
+    const mainCompartment = new Panel();
+    mainCompartment.id = 'jp-main-compartment';
+    mainCompartment.addWidget(this._spacer_top);
+    mainCompartment.addWidget(this._main);
+    mainCompartment.addWidget(this._spacer_bottom);
+    mainCompartment.addWidget(leftHandler.panel);
+    mainCompartment.addWidget(rightHandler.panel);
 
     const middleLayout = new BoxLayout({
       spacing: 0,
@@ -131,14 +142,12 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     });
     BoxLayout.setStretch(this._topWrapper, 0);
     BoxLayout.setStretch(this._menuWrapper, 0);
-    BoxLayout.setStretch(this._main, 1);
+    BoxLayout.setStretch(mainCompartment, 1);
 
     const middlePanel = new Panel({ layout: middleLayout });
     middlePanel.addWidget(this._topWrapper);
     middlePanel.addWidget(this._menuWrapper);
-    middlePanel.addWidget(this._spacer_top);
-    middlePanel.addWidget(this._main);
-    middlePanel.addWidget(this._spacer_bottom);
+    middlePanel.addWidget(mainCompartment);
     middlePanel.layout = middleLayout;
 
     const vsplitPanel = new SplitPanel();
@@ -155,26 +164,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     this._downPanel.id = 'jp-down-stack';
     SplitPanel.setStretch(downPanel, 0);
 
-    // TODO: Consider storing this as an attribute this._hsplitPanel if saving/restoring layout needed
-    const hsplitPanel = new SplitPanel();
-    hsplitPanel.id = 'main-split-panel';
-    hsplitPanel.spacing = 1;
-    BoxLayout.setStretch(hsplitPanel, 1);
-
-    SplitPanel.setStretch(leftHandler.panel, 0);
-    SplitPanel.setStretch(rightHandler.panel, 0);
-    SplitPanel.setStretch(middlePanel, 1);
-
-    hsplitPanel.addWidget(leftHandler.panel);
-    hsplitPanel.addWidget(middlePanel);
-    hsplitPanel.addWidget(rightHandler.panel);
-
-    // Use relative sizing to set the width of the side panels.
-    // This will still respect the min-size of children widget in the stacked
-    // panel.
-    hsplitPanel.setRelativeSizes([1, 2.5, 1]);
-
-    vsplitPanel.addWidget(hsplitPanel);
+    vsplitPanel.addWidget(middlePanel);
     vsplitPanel.addWidget(downPanel);
 
     rootLayout.spacing = 0;
@@ -278,14 +268,16 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     if (value !== this._translator) {
       this._translator = value;
       const trans = value.load('notebook');
-      this._leftHandler.closeButton.title = trans.__(
-        'Collapse %1 side panel',
-        this._leftHandler.area
-      );
-      this._rightHandler.closeButton.title = trans.__(
-        'Collapse %1 side panel',
-        this._rightHandler.area
-      );
+      for (const handler of [this._leftHandler, this._rightHandler]) {
+        handler.closeButton.title = trans.__(
+          'Collapse %1 side panel',
+          handler.area
+        );
+        handler.resizeHandle.setAttribute(
+          'aria-label',
+          trans.__('Resize %1 side panel', handler.area)
+        );
+      }
     }
   }
 
@@ -508,7 +500,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    * Expand the left panel to show the sidebar with its widget.
    */
   expandLeft(id?: string): void {
-    this._leftHandler.panel.show();
+    this._leftHandler.show();
     this._leftHandler.expand(id); // Show the current widget, if any
   }
 
@@ -517,14 +509,14 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    */
   collapseLeft(): void {
     this._leftHandler.collapse();
-    this._leftHandler.panel.hide();
+    this._leftHandler.hide();
   }
 
   /**
    * Expand the right panel to show the sidebar with its widget.
    */
   expandRight(id?: string): void {
-    this._rightHandler.panel.show();
+    this._rightHandler.show();
     this._rightHandler.expand(id); // Show the current widget, if any
   }
 
@@ -533,7 +525,7 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
    */
   collapseRight(): void {
     this._rightHandler.collapse();
-    this._rightHandler.panel.hide();
+    this._rightHandler.hide();
   }
 
   /**
@@ -543,6 +535,16 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
     configuration: INotebookShell.IUserLayout
   ): Promise<void> {
     this._userLayout = configuration;
+  }
+
+  /**
+   * Sync the side panel state to the DOM once the shell is attached, in case
+   * a panel was expanded before the attachment.
+   */
+  protected override onAfterAttach(msg: Message): void {
+    super.onAfterAttach(msg);
+    this._syncSidePanel(this._leftHandler);
+    this._syncSidePanel(this._rightHandler);
   }
 
   /**
@@ -576,6 +578,49 @@ export class NotebookShell extends Widget implements JupyterFrontEnd.IShell {
       this._lastDownAreaSize = size;
     }
     this._downPanel.hide();
+  }
+
+  /**
+   * Mirror a side panel's visibility and width onto the shell root, from
+   * which the stylesheet derives the whole layout: the panel size and the
+   * space reserved for the centered content.
+   */
+  private _syncSidePanel(handler: SidePanelHandler): void {
+    const open = handler.isVisible;
+    this.node.classList.toggle(`jp-mod-${handler.area}-panel-open`, open);
+    if (open) {
+      this.node.style.setProperty(
+        `--jp-private-${handler.area}-panel-size`,
+        `${handler.width}px`
+      );
+    }
+    // Defer the relatively expensive toolbar reflow to the end of a drag;
+    // CSS keeps everything else in step while dragging.
+    if (!handler.isResizing) {
+      this._notifyContentResized();
+    }
+  }
+
+  /**
+   * Reflow the current main area widget after the content width changed.
+   * Opening or resizing a side panel only changes CSS, so Lumino emits no
+   * resize message on its own; the toolbar needs one with real dimensions
+   * to collapse its items into the overflow menu.
+   */
+  private _notifyContentResized(): void {
+    const current = this.currentWidget;
+    if (!current || !current.isAttached) {
+      return;
+    }
+    MessageLoop.sendMessage(current, Widget.ResizeMessage.UnknownSize);
+    const toolbar = (current as Widget & { toolbar?: Widget }).toolbar;
+    if (toolbar && toolbar.isAttached) {
+      const { clientWidth, clientHeight } = toolbar.node;
+      MessageLoop.sendMessage(
+        toolbar,
+        new Widget.ResizeMessage(clientWidth, clientHeight)
+      );
+    }
   }
 
   private _topWrapper: Panel;

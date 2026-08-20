@@ -21,28 +21,89 @@
 body[data-notebook='notebooks']
   .jp-NotebookPanel.jp-mod-fullwidth
   .jp-WindowedPanel-outer {
-  padding-left: unset;
-  padding-right: unset !important;
+  /*
+    Span the full width, but never slide under an open side panel (the
+    right one already bounds the area through its margin).
+  */
+  padding-left: var(--jp-private-left-panel-width);
+  padding-right: 0 !important;
   width: unset;
 }
 
 /* Keep the notebook centered on the page */
 
 body[data-notebook='notebooks'] .jp-NotebookPanel-toolbar {
-  padding-left: calc(calc(100% - var(--jp-notebook-max-width)) * 0.5);
-  padding-right: calc(calc(100% - var(--jp-notebook-max-width)) * 0.5);
+  /*
+    Fit the toolbar node to the content column — width rather than paddings,
+    so the reactive toolbar measures its real content area when collapsing
+    items into the overflow menu. The toolbar chrome is painted by the
+    full-width ::before strip instead.
+  */
+  margin-left: var(--jp-private-content-margin-left);
+  width: calc(
+    100% - var(--jp-private-content-margin-left) -
+      var(--jp-private-content-margin-right)
+  ) !important;
+  background: transparent;
+  border-bottom: none;
+  box-shadow: none;
+
+  /*
+    Drop the `paint` containment from Lumino's inline `contain: strict` so
+    the strip can paint outside the node bounds.
+  */
+  contain: size layout style !important;
+}
+
+/*
+  Full-width toolbar background strip, carrying the chrome so it reaches the
+  window edges without a seam. The side panels start just below it (see
+  sidepanel.css).
+*/
+body[data-notebook='notebooks'] .jp-NotebookPanel-toolbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--jp-private-content-margin-left));
+  right: calc(-1 * var(--jp-private-content-margin-right));
+  z-index: -1;
+  background: var(--jp-toolbar-background);
+  border-bottom: var(--jp-border-width) solid var(--jp-toolbar-border-color);
+  box-shadow: var(--jp-toolbar-box-shadow);
 }
 
 body[data-notebook='notebooks'] .jp-WindowedPanel-outer {
   width: unset !important;
   padding-top: unset;
-  padding-left: calc(calc(100% - var(--jp-notebook-max-width)) * 0.5);
-  padding-right: calc(
+  padding-left: var(--jp-private-content-margin-left);
+
+  /*
+    End this scrollable area at the right panel edge so its vertical
+    scrollbar stays visible beside the panel instead of underneath it.
+  */
+  margin-right: var(--jp-private-right-panel-width);
+
+  /*
+    Half the scrollbar width comes off the right padding to keep the
+    notebook visually centered; the padding bottoms out when the panel
+    itself bounds the content.
+  */
+  padding-right: max(
+    0px,
     calc(
-        100% - var(--jp-notebook-max-width) - var(--jp-notebook-padding-offset)
-      ) * 0.5
+      var(--jp-private-content-margin-right) -
+        var(--jp-private-right-panel-width) - var(--jp-notebook-padding-offset) /
+        2
+    )
   ) !important;
   background: var(--jp-layout-color2);
+
+  /*
+    Query container for the compact rules below: its content box is exactly
+    the space left for the notebook beside any open side panels.
+  */
+  container-type: inline-size;
 }
 
 body[data-notebook='notebooks'] .jp-WindowedPanel-inner {
@@ -127,10 +188,6 @@ body[data-format='mobile'] .jp-NotebookCheckpoint {
   display: none;
 }
 
-body[data-format='mobile'] .jp-WindowedPanel-outer > *:first-child {
-  margin-top: 0;
-}
-
 body[data-format='mobile'] .jp-ToolbarButton .jp-DebuggerBugButton {
   display: none;
 }
@@ -142,6 +199,24 @@ body[data-notebook='notebooks'] .jp-WindowedPanel-viewport {
   /* Extra padding at the top and bottom so the notebook looks nicer */
   padding-top: calc(2 * var(--jp-notebook-padding));
   padding-bottom: calc(2 * var(--jp-notebook-padding));
+}
+
+/*
+  Tighten the vertical chrome around the notebook when the content column
+  gets narrow — because the window is small or the side panels take the
+  room. The scrollable area is the query container (see further up); the
+  threshold matches the app's mobile breakpoint.
+*/
+@container (max-width: 760px) {
+  body[data-notebook='notebooks'] .jp-WindowedPanel-inner {
+    margin-top: 0;
+    margin-bottom: calc(2 * var(--jp-notebook-padding));
+  }
+
+  body[data-notebook='notebooks'] .jp-WindowedPanel-viewport {
+    padding-top: var(--jp-notebook-padding);
+    padding-bottom: var(--jp-notebook-padding);
+  }
 }
 
 /* Notebook box shadow */
