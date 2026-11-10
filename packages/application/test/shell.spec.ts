@@ -35,6 +35,17 @@ describe('Shell for notebooks', () => {
       const widgets = Array.from(shell.widgets('top'));
       expect(widgets.length).toEqual(1);
     });
+
+    it('should place side panel stacks in the main compartment', () => {
+      const mainCompartment = shell.node.querySelector('#jp-main-compartment');
+      expect(mainCompartment).not.toBeNull();
+      expect(mainCompartment?.contains(shell.leftHandler.panel.node)).toBe(
+        true
+      );
+      expect(mainCompartment?.contains(shell.rightHandler.panel.node)).toBe(
+        true
+      );
+    });
   });
 
   describe('#widgets()', () => {
@@ -112,6 +123,78 @@ describe('Shell for notebooks', () => {
       shell.add(widget, 'right');
       const widgets = Array.from(shell.widgets('right'));
       expect(widgets.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('#expandLeft()', () => {
+    it('should reserve the panel width on the shell root', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'left');
+      expect(shell.leftCollapsed).toBe(true);
+
+      shell.expandLeft('foo');
+      expect(shell.leftCollapsed).toBe(false);
+      expect(shell.node.classList.contains('jp-mod-left-panel-open')).toBe(
+        true
+      );
+      shell.collapseLeft();
+      expect(shell.leftCollapsed).toBe(true);
+      expect(shell.node.classList.contains('jp-mod-left-panel-open')).toBe(
+        false
+      );
+    });
+  });
+
+  describe('#expandRight()', () => {
+    it('should reserve the panel width on the shell root', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'right');
+      expect(shell.rightCollapsed).toBe(true);
+
+      shell.expandRight('foo');
+      expect(shell.rightCollapsed).toBe(false);
+      expect(shell.node.classList.contains('jp-mod-right-panel-open')).toBe(
+        true
+      );
+      shell.collapseRight();
+      expect(shell.rightCollapsed).toBe(true);
+      expect(shell.node.classList.contains('jp-mod-right-panel-open')).toBe(
+        false
+      );
+    });
+  });
+
+  describe('side panel width', () => {
+    it.each(['left', 'right'] as const)(
+      'should mirror the %s panel width on the shell root',
+      (area) => {
+        const handler = shell[`${area}Handler`];
+        const size = `--jp-private-${area}-panel-size`;
+        expect(handler.width).toBeNull();
+        expect(shell.node.style.getPropertyValue(size)).toEqual('');
+
+        handler.width = 300.4;
+        expect(handler.width).toEqual(300);
+        expect(shell.node.style.getPropertyValue(size)).toEqual('300px');
+
+        handler.width = null;
+        expect(shell.node.style.getPropertyValue(size)).toEqual('');
+      }
+    );
+
+    it('should resize the panel from the keyboard', () => {
+      const handler = shell.leftHandler;
+      handler.resizeHandle.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight' })
+      );
+      expect(handler.width).toEqual(8);
+
+      handler.resizeHandle.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Home' })
+      );
+      expect(handler.width).toEqual(0);
     });
   });
 });
